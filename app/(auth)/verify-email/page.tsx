@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Card,
@@ -9,14 +10,14 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
 import { Mail, Loader2 } from "lucide-react";
 
-export default function VerifyEmailPage() {
+// Inner component that uses useSearchParams — must be inside Suspense
+function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
   const [resending, setResending] = useState(false);
@@ -36,72 +37,92 @@ export default function VerifyEmailPage() {
   }
 
   return (
+    <Card className="w-full max-w-md shadow-sm">
+      <CardHeader className="text-center pb-4 pt-7 px-8">
+        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+          <Mail className="w-7 h-7 text-primary" />
+        </div>
+        <CardTitle className="text-xl font-bold tracking-tight">
+          Check your email
+        </CardTitle>
+        <CardDescription className="mt-1">
+          We sent a verification link to
+          {email && (
+            <>
+              <br />
+              <strong className="text-foreground">{email}</strong>
+            </>
+          )}
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="px-8 pb-8 space-y-5">
+        <div className="rounded-xl bg-muted p-4 space-y-2 text-sm text-muted-foreground">
+          <p>
+            1. Open the email from <strong>Edible Mart</strong>
+          </p>
+          <p>
+            2. Click the <strong>&quot;Confirm your email&quot;</strong> link
+          </p>
+          <p>3. You&apos;ll be signed in automatically</p>
+        </div>
+
+        <p className="text-xs text-muted-foreground text-center">
+          Didn&apos;t get the email? Check your spam folder or resend below.
+        </p>
+
+        <Button
+          variant="outline"
+          className="w-full cursor-pointer"
+          onClick={resendEmail}
+          disabled={resending || !email}
+        >
+          {resending && <Loader2 className="mr-2 w-4 h-4 animate-spin" />}
+          {resending ? "Resending..." : "Resend verification email"}
+        </Button>
+
+        <p className="text-center text-sm text-muted-foreground">
+          Wrong email?{" "}
+          <Link
+            href="/signup"
+            className="text-primary font-medium hover:underline"
+          >
+            Sign up again
+          </Link>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Fallback shown while searchParams loads
+function VerifyEmailFallback() {
+  return (
+    <Card className="w-full max-w-md shadow-sm">
+      <CardContent className="px-8 py-12 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </CardContent>
+    </Card>
+  );
+}
+
+// Page export — wraps content in Suspense as Next.js requires
+export default function VerifyEmailPage() {
+  return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 py-12 bg-background">
       <div className="mb-6">
         <Image
-          src="/logo.jpeg"
+          src="/logo.png"
           alt="Edible Mart"
-          width={40}
+          width={70}
           height={10}
           className="object-contain rounded-xl invert"
           priority
         />
       </div>
-
-      <Card className="w-full max-w-md shadow-sm">
-        <CardHeader className="text-center pb-4 pt-7 px-8">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <Mail className="w-7 h-7 text-primary" />
-          </div>
-          <CardTitle className="text-xl font-bold tracking-tight">
-            Check your email
-          </CardTitle>
-          <CardDescription className="mt-1">
-            We sent a verification link to
-            {email && (
-              <>
-                <br />
-                <strong className="text-foreground">{email}</strong>
-              </>
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-8 pb-8 space-y-5">
-          <div className="rounded-xl bg-muted p-4 space-y-2 text-sm text-muted-foreground">
-            <p>
-              1. Open the email from <strong>Edible Mart</strong>
-            </p>
-            <p>
-              2. Click the <strong>&quot;Confirm your email&quot;</strong> link
-            </p>
-            <p>3. You&apos;ll be signed in automatically</p>
-          </div>
-
-          <p className="text-xs text-muted-foreground text-center">
-            Didn&apos;t get the email? Check your spam folder or resend below.
-          </p>
-
-          <Button
-            variant="outline"
-            className="w-full cursor-pointer"
-            onClick={resendEmail}
-            disabled={resending || !email}
-          >
-            {resending && <Loader2 className="mr-2 w-4 h-4 animate-spin" />}
-            {resending ? "Resending..." : "Resend verification email"}
-          </Button>
-
-          <p className="text-center text-sm text-muted-foreground">
-            Wrong email?{" "}
-            <Link
-              href="/signup"
-              className="text-primary font-medium hover:underline"
-            >
-              Sign up again
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
+      <Suspense fallback={<VerifyEmailFallback />}>
+        <VerifyEmailContent />
+      </Suspense>
     </div>
   );
 }
