@@ -113,11 +113,11 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen flex flex-col items-center justify-center p-4 py-12 bg-background">
       <div className="mb-6">
         <Image
-          src="/logo.png"
+          src="/logo.jpeg"
           alt="Edible Mart"
-          width={80}
+          width={70}
           height={10}
-          className="object-contain rounded-lg"
+          className="object-contain rounded-xl invert"
           priority
         />
       </div>
