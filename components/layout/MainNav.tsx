@@ -63,7 +63,7 @@ export default function MainNav({ userName, isAdmin }: Props) {
             alt="Edible Mart"
             width={40}
             height={10}
-            className="object-contain"
+            className="object-contain invert"
             priority
           />
         </Link>

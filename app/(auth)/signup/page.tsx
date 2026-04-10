@@ -121,9 +121,9 @@ export default function SignupPage() {
         <Image
           src="/logo.jpeg"
           alt="Edible Mart"
-          width={80}
+          width={70}
           height={10}
-          className="object-contain rounded-lg"
+          className="object-contain rounded-xl invert"
           priority
         />
       </div>
