@@ -1,198 +1,128 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import Image from "next/image";
-import { Loader2, Eye, EyeOff } from "lucide-react";
+import Link from "next/link";
+import { Mail, Loader2 } from "lucide-react";
 
-export default function ResetPasswordPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [form, setForm] = useState({ password: "", confirm: "" });
-  const [errors, setErrors] = useState<{ password?: string; confirm?: string }>(
-    {},
-  );
-  const [ready, setReady] = useState(false);
+// Inner component that uses useSearchParams — must be inside Suspense
+function VerifyEmailContent() {
+  const searchParams = useSearchParams();
+  const email = searchParams.get("email") ?? "";
+  const [resending, setResending] = useState(false);
 
-  useEffect(() => {
-    // Supabase puts the session in the URL hash after clicking the reset link
+  async function resendEmail() {
+    if (!email) return;
+    setResending(true);
     const supabase = createClient();
-    supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") setReady(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/` },
     });
-  }, []);
-
-  function validate() {
-    const newErrors: typeof errors = {};
-    if (!form.password) newErrors.password = "Password is required";
-    else if (form.password.length < 6)
-      newErrors.password = "Password must be at least 6 characters";
-    if (!form.confirm) newErrors.confirm = "Please confirm your password";
-    else if (form.password !== form.confirm)
-      newErrors.confirm = "Passwords do not match";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (error) toast.error("Failed to resend. Please try again.");
+    else toast.success("Verification email resent!");
+    setResending(false);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!validate()) return;
-    setLoading(true);
-
-    const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({
-      password: form.password,
-    });
-
-    if (error) {
-      toast.error("Failed to reset password. Please try again.");
-      setLoading(false);
-    } else {
-      toast.success("Password updated! Signing you in...");
-      setTimeout(() => router.replace("/"), 1500);
-    }
-  }
-
-  if (!ready) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
-        <div className="mb-6">
-          <Image
-            src="/logo.jpeg"
-            alt="Edible Mart"
-            width={40}
-            height={10}
-            className="object-contain rounded-xl invert"
-            priority
-          />
+  return (
+    <Card className="w-full max-w-md shadow-sm">
+      <CardHeader className="text-center pb-4 pt-7 px-8">
+        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+          <Mail className="w-7 h-7 text-primary" />
         </div>
-        <Card className="w-full max-w-md shadow-sm">
-          <CardContent className="px-8 py-12 text-center space-y-3">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
-            <p className="text-sm text-muted-foreground">
-              Verifying reset link...
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+        <CardTitle className="text-xl font-bold tracking-tight">
+          Check your email
+        </CardTitle>
+        <CardDescription className="mt-1">
+          We sent a verification link to
+          {email && (
+            <>
+              <br />
+              <strong className="text-foreground">{email}</strong>
+            </>
+          )}
+        </CardDescription>
+      </CardHeader>
 
+      <CardContent className="px-8 pb-8 space-y-5">
+        <div className="rounded-xl bg-muted p-4 space-y-2 text-sm text-muted-foreground">
+          <p>
+            1. Open the email from <strong>Edible Mart</strong>
+          </p>
+          <p>
+            2. Click the <strong>&quot;Confirm your email&quot;</strong> link
+          </p>
+          <p>3. You&apos;ll be signed in automatically</p>
+        </div>
+
+        <p className="text-xs text-muted-foreground text-center">
+          Didn&apos;t get the email? Check your spam folder or resend below.
+        </p>
+
+        <Button
+          variant="outline"
+          className="w-full cursor-pointer"
+          onClick={resendEmail}
+          disabled={resending || !email}
+        >
+          {resending && <Loader2 className="mr-2 w-4 h-4 animate-spin" />}
+          {resending ? "Resending..." : "Resend verification email"}
+        </Button>
+
+        <p className="text-center text-sm text-muted-foreground">
+          Wrong email?{" "}
+          <Link
+            href="/signup"
+            className="text-primary font-medium hover:underline"
+          >
+            Sign up again
+          </Link>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Fallback shown while searchParams loads
+function VerifyEmailFallback() {
+  return (
+    <Card className="w-full max-w-md shadow-sm">
+      <CardContent className="px-8 py-12 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </CardContent>
+    </Card>
+  );
+}
+
+// Page export — wraps content in Suspense as Next.js requires
+export default function VerifyEmailPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 py-12 bg-background">
       <div className="mb-6">
         <Image
-          src="/logo.png"
+          src="/logo.jpeg"
           alt="Edible Mart"
-          width={80}
+          width={70}
           height={10}
-          className="object-contain rounded-lg"
+          className="object-contain rounded-xl invert"
           priority
         />
       </div>
-
-      <Card className="w-full max-w-md shadow-sm">
-        <CardHeader className="text-center pb-4 pt-7 px-8">
-          <CardTitle className="text-xl font-bold tracking-tight">
-            Set new password
-          </CardTitle>
-          <CardDescription className="mt-1">
-            Choose a strong password for your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-8 pb-8">
-          <form onSubmit={handleSubmit} noValidate className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="password">New password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="At least 6 characters"
-                  value={form.password}
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, password: e.target.value }));
-                    setErrors((er) => ({ ...er, password: undefined }));
-                  }}
-                  className={`h-11 pr-11 ${errors.password ? "border-red-500 focus-visible:ring-red-500" : ""}`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                  tabIndex={-1}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-              {errors.password && (
-                <p className="text-xs text-red-500">{errors.password}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirm">Confirm new password</Label>
-              <div className="relative">
-                <Input
-                  id="confirm"
-                  type={showConfirm ? "text" : "password"}
-                  placeholder="Re-enter new password"
-                  value={form.confirm}
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, confirm: e.target.value }));
-                    setErrors((er) => ({ ...er, confirm: undefined }));
-                  }}
-                  className={`h-11 pr-11 ${errors.confirm ? "border-red-500 focus-visible:ring-red-500" : ""}`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                  tabIndex={-1}
-                >
-                  {showConfirm ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-              {errors.confirm && (
-                <p className="text-xs text-red-500">{errors.confirm}</p>
-              )}
-            </div>
-
-            <div className="pt-2">
-              <Button
-                type="submit"
-                className="w-full h-11 cursor-pointer"
-                disabled={loading}
-              >
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {loading ? "Updating..." : "Update password"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      <Suspense fallback={<VerifyEmailFallback />}>
+        <VerifyEmailContent />
+      </Suspense>
     </div>
   );
 }
