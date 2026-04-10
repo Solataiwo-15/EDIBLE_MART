@@ -15,15 +15,13 @@ import {
 import { toast } from "sonner";
 import Link from "next/link";
 import Image from "next/image";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 
-type FormErrors = {
-  email?: string;
-  password?: string;
-};
+type FormErrors = { email?: string; password?: string };
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [form, setForm] = useState({ email: "", password: "" });
 
@@ -55,24 +53,13 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 py-12 bg-background">
-      {/* Logo */}
-      <div className="mb-6 flex flex-col items-center gap-3">
-        {/* <div className="w-16 h-16 rounded-2xl bg-[#1C0A06] flex items-center justify-center overflow-hidden shadow-md">
-          <Image
-            src="/icon-logo.png"
-            alt="Edible Mart icon"
-            width={56}
-            height={56}
-            className="object-contain"
-            priority
-          />
-        </div> */}
+      <div className="mb-6">
         <Image
-          src="/logo.jpeg"
+          src="/logo.png"
           alt="Edible Mart"
-          width={70}
+          width={80}
           height={10}
-          className="object-contain rounded-xl invert"
+          className="object-contain rounded-lg"
           priority
         />
       </div>
@@ -86,7 +73,6 @@ export default function LoginPage() {
             Sign in to your Edible Mart account
           </CardDescription>
         </CardHeader>
-
         <CardContent className="px-8 pb-8">
           <form onSubmit={handleSubmit} noValidate className="space-y-5">
             <div className="space-y-2">
@@ -107,19 +93,36 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                {/* Forgot password — we can wire this up later */}
-                <span className="text-xs text-muted-foreground cursor-not-allowed">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-primary hover:underline"
+                >
                   Forgot password?
-                </span>
+                </Link>
               </div>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Your password"
-                value={form.password}
-                onChange={(e) => handleChange("password", e.target.value)}
-                className={`h-11 ${errors.password ? "border-red-500 focus-visible:ring-red-500" : ""}`}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Your password"
+                  value={form.password}
+                  onChange={(e) => handleChange("password", e.target.value)}
+                  className={`h-11 pr-11 ${errors.password ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
               {errors.password && (
                 <p className="text-xs text-red-500">{errors.password}</p>
               )}
