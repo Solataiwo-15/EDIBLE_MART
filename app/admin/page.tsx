@@ -19,7 +19,7 @@ interface RecentOrder {
   status: string;
   delivery_type: string;
   created_at: string;
-  booking_cycles: { title: string }[] | null | any;
+  //   booking_cycles: { title: string }[] | null | any;
   // You can add status and created_at if you want to be fully accurate
 }
 
