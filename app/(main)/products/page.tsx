@@ -202,28 +202,29 @@ function ProductCard({
 
   if (!selectedVariant) return null;
 
-  // remaining is always stored in full-slot units
-  const remaining = stockMap[selectedVariant.id] ?? null;
-  const outOfStock = remaining !== null && remaining <= 0;
+  // Always use the FULL SLOT variant as the stock source
+  const fullSlotVariant =
+    variants.find(
+      (v) =>
+        v.name.toLowerCase().includes("full slot") ||
+        v.name.toLowerCase() === "full",
+    ) ?? variants[0];
+
+  // One pool, one source of truth
+  const poolRemaining = stockMap[fullSlotVariant?.id] ?? null;
+  const outOfStock = poolRemaining !== null && poolRemaining <= 0;
 
   const isHalfSlot = selectedVariant.name.toLowerCase().includes("half slot");
-  const isFullSlot = selectedVariant.name.toLowerCase().includes("full slot");
 
-  // Half slot = 2 per full slot, so multiply remaining by 2
-  const maxQty =
-    remaining === null
-      ? 99
-      : isHalfSlot
-        ? Math.floor(remaining * 2)
-        : Math.floor(remaining); // full slot or special part (leg, head, tail)
-
-  // Display label on badge: show half-slot count for half variants
+  // Half slot shows 2× the pool, full slot shows pool directly
   const displayRemaining =
-    remaining === null
+    poolRemaining === null
       ? null
       : isHalfSlot
-        ? Math.floor(remaining * 2)
-        : Math.floor(remaining);
+        ? Math.floor(poolRemaining * 2)
+        : Math.floor(poolRemaining);
+
+  const maxQty = displayRemaining === null ? 99 : Math.max(displayRemaining, 0);
 
   const canSplitInuEran =
     product.category === "cuts" &&
