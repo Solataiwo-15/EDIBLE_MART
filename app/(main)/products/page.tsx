@@ -203,20 +203,23 @@ function ProductCard({
   if (!selectedVariant) return null;
 
   // Always use the FULL SLOT variant as the stock source
+  // Find the full/standard variant as the single stock pool source
   const fullSlotVariant =
     variants.find(
       (v) =>
         v.name.toLowerCase().includes("full slot") ||
-        v.name.toLowerCase() === "full",
+        v.name.toLowerCase() === "full" ||
+        v.name.toLowerCase() === "standard",
     ) ?? variants[0];
 
-  // One pool, one source of truth
   const poolRemaining = stockMap[fullSlotVariant?.id] ?? null;
   const outOfStock = poolRemaining !== null && poolRemaining <= 0;
 
-  const isHalfSlot = selectedVariant.name.toLowerCase().includes("half slot");
+  // Half variants: "Half Slot" or just "Half"
+  const isHalfSlot =
+    selectedVariant.name.toLowerCase().includes("half slot") ||
+    selectedVariant.name.toLowerCase() === "half";
 
-  // Half slot shows 2× the pool, full slot shows pool directly
   const displayRemaining =
     poolRemaining === null
       ? null

@@ -476,16 +476,18 @@ function ProductCard({
                     />
 
                     {/* Stock */}
-                    {/* Only show stock field for full/standard variants — half slot is derived */}
-                    {!variant.name.toLowerCase().includes("half slot") && (
-                      <StockField
-                        label="Stock (full slots)"
-                        initialValue={stock?.stock_slots ?? 0}
-                        soldSlots={soldSlots}
-                        onSave={(val) => onUpdateStock(variant.id, val)}
-                      />
-                    )}
-                    {variant.name.toLowerCase().includes("half slot") && (
+                    {/* Show stock field only for full/standard variants */}
+                    {!variant.name.toLowerCase().includes("half slot") &&
+                      variant.name.toLowerCase() !== "half" && (
+                        <StockField
+                          label="Stock (full slots)"
+                          initialValue={stock?.stock_slots ?? 0}
+                          soldSlots={soldSlots}
+                          onSave={(val) => onUpdateStock(variant.id, val)}
+                        />
+                      )}
+                    {(variant.name.toLowerCase().includes("half slot") ||
+                      variant.name.toLowerCase() === "half") && (
                       <div className="space-y-1">
                         <p className="text-xs text-muted-foreground">Stock</p>
                         <div className="h-8 flex items-center">
