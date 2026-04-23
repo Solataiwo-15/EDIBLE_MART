@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -332,7 +331,7 @@ export default function AdminOrdersPage() {
                           {order.recipient_name}
                         </span>
                         <span className="text-xs font-mono text-muted-foreground">
-                          EDM{String(order.order_number).padStart(3, "0")}
+                          #EDM{String(order.order_number).padStart(3, "0")}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground">

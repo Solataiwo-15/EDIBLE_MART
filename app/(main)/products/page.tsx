@@ -3,13 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useCartStore } from "@/lib/store/cart";
-import {
-  Product,
-  ProductVariant,
-  CycleStock,
-  BookingCycle,
-  CartItem,
-} from "@/lib/types";
+import { Product, ProductVariant, BookingCycle, CartItem } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -202,7 +196,6 @@ function ProductCard({
 
   if (!selectedVariant) return null;
 
-  // Always use the FULL SLOT variant as the stock source
   // Find the full/standard variant as the single stock pool source
   const fullSlotVariant =
     variants.find(

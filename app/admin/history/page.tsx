@@ -138,7 +138,7 @@ export default function AdminHistoryPage() {
       let y = margin;
 
       // ── Header ──
-      doc.setFillColor(28, 10, 6); // brand dark
+      doc.setFillColor(28, 10, 6);
       doc.rect(0, 0, pageW, 28, "F");
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16);
@@ -209,7 +209,7 @@ export default function AdminHistoryPage() {
         doc.roundedRect(x, y, statBoxW - 2, statBoxH, 2, 2, "F");
         doc.setFontSize(11);
         doc.setFont("helvetica", "bold");
-        doc.setTextColor(232, 35, 26); // brand red
+        doc.setTextColor(232, 35, 26);
         doc.text(stat.value, x + (statBoxW - 2) / 2, y + 7, {
           align: "center",
         });
@@ -271,7 +271,7 @@ export default function AdminHistoryPage() {
         doc.setFontSize(7);
         doc.setFont("helvetica", "normal");
 
-        const orderNum = `EDM${String(order.order_number).padStart(3, "0")}`;
+        const orderNum = `#EDM${String(order.order_number).padStart(3, "0")}`;
         doc.text(orderNum, cols.id, y + 5);
         doc.text(order.recipient_name.slice(0, 20), cols.name, y + 5);
 
@@ -483,7 +483,8 @@ export default function AdminHistoryPage() {
                           <div className="space-y-0.5 flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs font-mono font-medium">
-                                EDM{String(order.order_number).padStart(3, "0")}
+                                #EDM
+                                {String(order.order_number).padStart(3, "0")}
                               </span>
                               <span className="text-xs font-medium truncate">
                                 {order.recipient_name}

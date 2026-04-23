@@ -37,7 +37,7 @@ export default function AdminNav({ userName }: { userName: string }) {
   return (
     <>
       {/* ── Top header ── */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#1C0A06] text-white flex items-center px-4 gap-4">
+      <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-brand-dark text-white flex items-center px-4 gap-4">
         <button
           className="md:hidden p-1 cursor-pointer"
           onClick={() => setMobileOpen((o) => !o)}

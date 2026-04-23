@@ -1,5 +1,3 @@
-// lib/email.ts
-// Call these functions from client components to send emails via the API route
 
 export async function sendBookingOpenBlast(cycleTitle: string, slaughterDate: string) {
   const res = await fetch('/api/email', {

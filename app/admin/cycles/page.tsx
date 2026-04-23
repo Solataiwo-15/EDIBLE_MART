@@ -13,7 +13,6 @@ import {
   Plus,
   CalendarDays,
   Users,
-  TrendingUp,
   ChevronDown,
   ChevronUp,
   Mail,

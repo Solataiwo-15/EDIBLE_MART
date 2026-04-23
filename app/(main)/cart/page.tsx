@@ -42,7 +42,7 @@ export default function CartPage() {
             key={`${item.variant_id}-${item.with_inu_eran}`}
             className="flex gap-4 p-4 rounded-2xl border border-border bg-card"
           >
-            {/* Image / emoji */}
+            {/* emoji */}
             <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center shrink-0 text-2xl">
               🥩
             </div>

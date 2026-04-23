@@ -19,8 +19,6 @@ interface RecentOrder {
   status: string;
   delivery_type: string;
   created_at: string;
-  //   booking_cycles: { title: string }[] | null | any;
-  // You can add status and created_at if you want to be fully accurate
 }
 
 export default async function AdminDashboardPage() {
@@ -193,7 +191,7 @@ export default async function AdminDashboardPage() {
                   <p className="text-sm font-medium">
                     {order.recipient_name}
                     <span className="text-xs text-muted-foreground ml-2">
-                      EDM{String(order.order_number).padStart(3, "0")}
+                      #EDM{String(order.order_number).padStart(3, "0")}
                     </span>
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">

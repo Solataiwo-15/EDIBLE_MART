@@ -21,7 +21,6 @@ import { Loader2, ArrowLeft, User, Truck, Wallet } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns/format";
-import { profile } from "console";
 
 type PaymentMethod = "bank_transfer" | "pay_on_delivery";
 type DeliveryType = "delivery" | "pickup";
@@ -370,7 +369,7 @@ export default function CheckoutPage() {
             desc="Pay cash when you receive or collect your order"
           />
 
-          {/* Paystack — disabled until we integrate */}
+          {/* Paystack — disabled for now */}
           <div className="w-full rounded-xl border border-border p-4 opacity-40 cursor-not-allowed select-none">
             <p className="font-semibold text-sm text-foreground">
               Pay now (card / online)

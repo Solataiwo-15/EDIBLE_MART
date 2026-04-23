@@ -6,16 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import {
-  Loader2,
-  CheckCircle2,
-  MapPin,
-  User,
-  Truck,
-  Wallet,
-  ArrowLeft,
-  Copy,
-} from "lucide-react";
+import { Loader2, CheckCircle2, User, Truck, Wallet, Copy } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
