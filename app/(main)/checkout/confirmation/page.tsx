@@ -123,7 +123,7 @@ export default function ConfirmationPage() {
           <CheckCircle2 className="w-8 h-8 text-green-600" />
         </div>
         <div>
-          <h1 className="text-xl font-bold">Order confirmed!</h1>
+          <h1 className="text-xl font-bold">Order Reserved!</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {order.booking_cycles.title} • Slaughter{" "}
             {format(
