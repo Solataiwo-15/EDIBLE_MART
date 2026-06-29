@@ -61,7 +61,6 @@ export default function AdminCustomersPage() {
           )
         `,
         )
-        .eq("is_admin", false)
         .order("created_at", { ascending: false });
 
       setCustomers((data as Customer[]) ?? []);
