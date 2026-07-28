@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -55,6 +56,13 @@ type AdminOrder = {
   order_items: OrderItem[];
 };
 
+type Cycle = {
+  id: string;
+  title: string;
+  status: string;
+  slaughter_date: string;
+};
+
 const statusOptions = [
   {
     value: "pending",
@@ -105,57 +113,61 @@ const paymentStatusOptions = [
   { value: "waived", label: "Waived", color: "bg-gray-100 text-gray-600" },
 ];
 
-type FilterType =
-  | "all"
-  | "paid"
-  | "unpaid"
-  | "delivery"
-  | "pickup"
-  | "pod_pending";
+type FilterType = "all" | "paid" | "unpaid" | "delivery" | "pickup";
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [cycles, setCycles] = useState<Cycle[]>([]);
+  const [selectedCycleId, setSelectedCycleId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  // Load all cycles on mount
   useEffect(() => {
+    async function loadCycles() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("booking_cycles")
+        .select("id, title, status, slaughter_date")
+        .order("created_at", { ascending: false });
+
+      if (data && data.length > 0) {
+        setCycles(data as Cycle[]);
+        setSelectedCycleId(data[0].id); // default to latest
+      }
+    }
+    loadCycles();
+  }, []);
+
+  // Load orders whenever selected cycle changes
+  useEffect(() => {
+    if (!selectedCycleId) return;
+
     async function loadOrders() {
       setLoading(true);
       const supabase = createClient();
-
-      const { data: cycleData } = await supabase
-        .from("booking_cycles")
-        .select("id")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (!cycleData) {
-        setLoading(false);
-        return;
-      }
 
       const { data } = await supabase
         .from("orders")
         .select(
           `
-        *,
-        profiles ( full_name, phone ),
-        booking_cycles ( title, slaughter_date ),
-        location_axes ( name ),
-        order_items (
-          id, quantity, subtotal, with_inu_eran,
-          product_variants (
-            name,
-            products ( name )
+          *,
+          profiles ( full_name, phone ),
+          booking_cycles ( title, slaughter_date ),
+          location_axes ( name ),
+          order_items (
+            id, quantity, subtotal, with_inu_eran,
+            product_variants (
+              name,
+              products ( name )
+            )
           )
+        `,
         )
-      `,
-        )
-        .eq("cycle_id", cycleData.id)
+        .eq("cycle_id", selectedCycleId)
         .order("order_number", { ascending: true });
 
       setOrders((data as AdminOrder[]) ?? []);
@@ -163,7 +175,7 @@ export default function AdminOrdersPage() {
     }
 
     loadOrders();
-  }, []);
+  }, [selectedCycleId]);
 
   async function updateOrderStatus(
     orderId: string,
@@ -198,7 +210,8 @@ export default function AdminOrdersPage() {
     else toast.success("Note saved");
   }
 
-  // Apply filters
+  const selectedCycle = cycles.find((c) => c.id === selectedCycleId);
+
   const filtered = orders.filter((order) => {
     const matchesSearch =
       order.recipient_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -215,13 +228,11 @@ export default function AdminOrdersPage() {
             order.payment_status === "pod_settled"
           : filter === "unpaid"
             ? order.payment_status === "pod_pending"
-            : filter === "pod_pending"
-              ? order.payment_status === "pod_pending"
-              : filter === "delivery"
-                ? order.delivery_type === "delivery"
-                : filter === "pickup"
-                  ? order.delivery_type === "pickup"
-                  : true;
+            : filter === "delivery"
+              ? order.delivery_type === "delivery"
+              : filter === "pickup"
+                ? order.delivery_type === "pickup"
+                : true;
 
     return matchesSearch && matchesFilter;
   });
@@ -261,9 +272,46 @@ export default function AdminOrdersPage() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold">Orders</h1>
-        <p className="text-sm text-muted-foreground">
-          {orders.length} orders this cycle
+        <p className="text-sm text-muted-foreground">{orders.length} orders</p>
+      </div>
+
+      {/* ── Cycle selector ── */}
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium text-muted-foreground">
+          Viewing cycle
         </p>
+        <Select value={selectedCycleId} onValueChange={setSelectedCycleId}>
+          <SelectTrigger className="h-10 max-w-sm">
+            <SelectValue placeholder="Select a cycle" />
+          </SelectTrigger>
+          <SelectContent>
+            {cycles.map((cycle) => (
+              <SelectItem key={cycle.id} value={cycle.id}>
+                <div className="flex items-center gap-2">
+                  <span>{cycle.title}</span>
+                  <span
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                      cycle.status === "open"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-gray-100 text-gray-600",
+                    )}
+                  >
+                    {cycle.status === "open" ? "Active" : "Closed"}
+                  </span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Past cycle warning — reminds admin they're editing a past cycle */}
+        {selectedCycle && selectedCycle.status === "closed" && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 max-w-sm">
+            ⚠️ You are editing a <strong>closed</strong> cycle — changes here
+            affect past order records
+          </div>
+        )}
       </div>
 
       {/* ── Search ── */}
@@ -331,7 +379,7 @@ export default function AdminOrdersPage() {
                           {order.recipient_name}
                         </span>
                         <span className="text-xs font-mono text-muted-foreground">
-                          #EDM{String(order.order_number).padStart(3, "0")}
+                          EDM{String(order.order_number).padStart(3, "0")}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground">
@@ -430,7 +478,6 @@ export default function AdminOrdersPage() {
                       </p>
 
                       <div className="grid grid-cols-2 gap-2">
-                        {/* Order status */}
                         <div className="space-y-1">
                           <p className="text-xs text-muted-foreground">
                             Order status
@@ -459,7 +506,6 @@ export default function AdminOrdersPage() {
                           </Select>
                         </div>
 
-                        {/* Payment status */}
                         <div className="space-y-1">
                           <p className="text-xs text-muted-foreground">
                             Payment status
@@ -489,7 +535,6 @@ export default function AdminOrdersPage() {
                         </div>
                       </div>
 
-                      {/* Admin notes */}
                       <AdminNoteField
                         orderId={order.id}
                         initialNote={order.admin_notes ?? ""}
@@ -497,8 +542,8 @@ export default function AdminOrdersPage() {
                       />
                     </div>
 
-                    {/* Total */}
                     <Separator />
+
                     <div className="px-4 py-3 flex justify-between font-bold text-sm">
                       <span>Total</span>
                       <span className="text-primary">
@@ -516,7 +561,6 @@ export default function AdminOrdersPage() {
   );
 }
 
-/* ── Admin note field with save button ── */
 function AdminNoteField({
   orderId,
   initialNote,
