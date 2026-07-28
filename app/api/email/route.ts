@@ -234,13 +234,30 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      let sent = 0
-      const errors: string[] = []
+      // Remove empty and duplicate email addresses
+      const recipients = Array.from(
+        new Map(
+          customers
+            .filter(customer => customer.email?.trim())
+            .map(customer => [
+              customer.email!.trim().toLowerCase(),
+              {
+                full_name: customer.full_name,
+                email: customer.email!.trim(),
+              },
+            ]),
+        ).values(),
+      )
 
-      for (const customer of customers) {
-        if (!customer.email) continue
-        try {
-          const { error } = await resend.emails.send({
+      let sent = 0
+      let failed = 0
+
+      // Resend accepts a maximum of 100 emails per batch
+      for (let i = 0; i < recipients.length; i += 100) {
+        const batchRecipients = recipients.slice(i, i + 100)
+
+        const { error } = await resend.batch.send(
+          batchRecipients.map(customer => ({
             from: FROM_ADDRESS,
             to: customer.email,
             subject: `Bookings are open — ${cycleTitle}`,
@@ -249,31 +266,36 @@ export async function POST(req: NextRequest) {
               cycleTitle,
               slaughterDate,
             ),
+          })),
+        )
+
+        if (error) {
+          console.error('Email batch failed:', {
+            error,
+            recipients: batchRecipients.map(customer => customer.email),
           })
 
-          if (error) {
-            console.error(
-              `Email failed for ${customer.email}:`,
-              error,
-            )
-
-            errors.push(customer.email)
-          } else {
-            sent++
-          }
-
-          await new Promise(r => setTimeout(r, 50))
-        } catch (error) {
-          console.error(
-            `Unexpected email error for ${customer.email}:`,
-            error,
-          )
-
-          errors.push(customer.email)
+          failed += batchRecipients.length
+        } else {
+          sent += batchRecipients.length
         }
       }
 
-      return NextResponse.json({ sent, errors: errors.length })
+      if (sent === 0 && failed > 0) {
+        return NextResponse.json(
+          {
+            error: 'All emails failed to send',
+            sent: 0,
+            failed,
+          },
+          { status: 502 },
+        )
+      }
+
+      return NextResponse.json({
+        sent,
+        failed,
+      })
     }
 
     // ── Order confirmation ──
