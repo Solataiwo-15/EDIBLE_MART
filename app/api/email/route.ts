@@ -215,19 +215,19 @@ export async function POST(req: NextRequest) {
       const { cycleTitle, slaughterDate } = body
 
       // Temporary admin-only email test
-if (!user.email) {
-  return NextResponse.json(
-    { error: 'Admin email was not found' },
-    { status: 400 },
-  )
-}
+      if (!user.email) {
+        return NextResponse.json(
+          { error: 'Admin email was not found' },
+          { status: 400 },
+        )
+      }
 
-const customers = [
-  {
-    full_name: 'Admin',
-    email: user.email,
-  },
-]
+      const customers = [
+        {
+          full_name: 'Admin',
+          email: user.email,
+        },
+      ]
 
       let sent = 0
       const errors: string[] = []
@@ -235,15 +235,35 @@ const customers = [
       for (const customer of customers) {
         if (!customer.email) continue
         try {
-          await resend.emails.send({
+          const { error } = await resend.emails.send({
             from: FROM_ADDRESS,
             to: customer.email,
             subject: `🥩 Bookings are open — ${cycleTitle}`,
-            html: bookingOpenEmail(customer.full_name, cycleTitle, slaughterDate),
+            html: bookingOpenEmail(
+              customer.full_name || 'there',
+              cycleTitle,
+              slaughterDate,
+            ),
           })
-          sent++
-          await new Promise(r => setTimeout(r, 50)) // avoid rate limits
-        } catch {
+
+          if (error) {
+            console.error(
+              `Email failed for ${customer.email}:`,
+              error,
+            )
+
+            errors.push(customer.email)
+          } else {
+            sent++
+          }
+
+          await new Promise(r => setTimeout(r, 50))
+        } catch (error) {
+          console.error(
+            `Unexpected email error for ${customer.email}:`,
+            error,
+          )
+
           errors.push(customer.email)
         }
       }
