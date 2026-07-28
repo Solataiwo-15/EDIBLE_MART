@@ -214,16 +214,20 @@ export async function POST(req: NextRequest) {
 
       const { cycleTitle, slaughterDate } = body
 
-      // Get all customers with their stored emails
-      const { data: customers } = await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('is_admin', false)
-        .not('email', 'is', null)
+      // Temporary admin-only email test
+if (!user.email) {
+  return NextResponse.json(
+    { error: 'Admin email was not found' },
+    { status: 400 },
+  )
+}
 
-      if (!customers || customers.length === 0) {
-        return NextResponse.json({ sent: 0, message: 'No customers with emails found' })
-      }
+const customers = [
+  {
+    full_name: 'Admin',
+    email: user.email,
+  },
+]
 
       let sent = 0
       const errors: string[] = []
