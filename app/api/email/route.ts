@@ -214,11 +214,36 @@ export async function POST(req: NextRequest) {
 
       const { cycleTitle, slaughterDate } = body
 
-      // Temporary admin-only email test
+      // Temporary test: admin plus one customer
       if (!user.email) {
         return NextResponse.json(
           { error: 'Admin email was not found' },
           { status: 400 },
+        )
+      }
+
+      const TEST_CUSTOMER_EMAIL = 'solataiwo15@gmail.com'
+
+      const { data: testCustomer, error: customerError } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('is_admin', false)
+        .ilike('email', TEST_CUSTOMER_EMAIL)
+        .maybeSingle()
+
+      if (customerError) {
+        console.error('Test customer lookup failed:', customerError)
+
+        return NextResponse.json(
+          { error: 'Could not retrieve the test customer' },
+          { status: 500 },
+        )
+      }
+
+      if (!testCustomer?.email) {
+        return NextResponse.json(
+          { error: 'Test customer was not found in profiles' },
+          { status: 404 },
         )
       }
 
@@ -227,7 +252,17 @@ export async function POST(req: NextRequest) {
           full_name: 'Admin',
           email: user.email,
         },
-      ]
+        {
+          full_name: testCustomer.full_name || 'Customer',
+          email: testCustomer.email,
+        },
+      ].filter(
+        (customer, index, list) =>
+          list.findIndex(
+            item =>
+              item.email.toLowerCase() === customer.email.toLowerCase(),
+          ) === index,
+      )
 
       let sent = 0
       const errors: string[] = []
@@ -238,7 +273,7 @@ export async function POST(req: NextRequest) {
           const { error } = await resend.emails.send({
             from: FROM_ADDRESS,
             to: customer.email,
-            subject: `🥩 Bookings are open — ${cycleTitle}`,
+            subject: `Bookings are open — ${cycleTitle}`,
             html: bookingOpenEmail(
               customer.full_name || 'there',
               cycleTitle,
