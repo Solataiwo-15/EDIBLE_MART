@@ -214,55 +214,25 @@ export async function POST(req: NextRequest) {
 
       const { cycleTitle, slaughterDate } = body
 
-      // Temporary test: admin plus one customer
-      if (!user.email) {
-        return NextResponse.json(
-          { error: 'Admin email was not found' },
-          { status: 400 },
-        )
-      }
-
-      const TEST_CUSTOMER_EMAIL = 'solataiwo15@gmail.com'
-
-      const { data: testCustomer, error: customerError } = await supabase
+      // Get all profiles with stored emails, including admin
+      const { data: customers, error: customersError } = await supabase
         .from('profiles')
         .select('full_name, email')
-        .eq('is_admin', false)
-        .ilike('email', TEST_CUSTOMER_EMAIL)
-        .maybeSingle()
+        .not('email', 'is', null)
 
-      if (customerError) {
-        console.error('Test customer lookup failed:', customerError)
-
+      if (customersError) {
         return NextResponse.json(
-          { error: 'Could not retrieve the test customer' },
+          { error: 'Could not fetch customer emails' },
           { status: 500 },
         )
       }
 
-      if (!testCustomer?.email) {
-        return NextResponse.json(
-          { error: 'Test customer was not found in profiles' },
-          { status: 404 },
-        )
+      if (!customers || customers.length === 0) {
+        return NextResponse.json({
+          sent: 0,
+          message: 'No customers with emails found',
+        })
       }
-
-      const customers = [
-        {
-          full_name: 'Admin',
-          email: user.email,
-        },
-        {
-          full_name: testCustomer.full_name || 'Customer',
-          email: testCustomer.email,
-        },
-      ].filter(
-        (customer, index, list) =>
-          list.findIndex(
-            item =>
-              item.email.toLowerCase() === customer.email.toLowerCase(),
-          ) === index,
-      )
 
       let sent = 0
       const errors: string[] = []
