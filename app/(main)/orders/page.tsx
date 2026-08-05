@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  countsTowardOutstanding,
+  getPaymentStatusPresentation,
+} from "@/lib/payment-status";
 
 type OrderWithDetails = {
   id: string;
@@ -87,13 +91,6 @@ const statusConfig: Record<
   },
 };
 
-const paymentConfig: Record<string, { label: string; color: string }> = {
-  paid: { label: "Paid", color: "bg-green-100 text-green-800" },
-  pod_pending: { label: "Unpaid", color: "bg-red-100 text-red-800" },
-  pod_settled: { label: "Settled", color: "bg-green-100 text-green-800" },
-  waived: { label: "Waived", color: "bg-gray-100 text-gray-600" },
-};
-
 export default function OrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<OrderWithDetails[]>([]);
@@ -102,7 +99,7 @@ export default function OrdersPage() {
   const addItem = useCartStore((s) => s.addItem);
   const clearCart = useCartStore((s) => s.clearCart);
 
-  const hasDebt = orders.some((o) => o.payment_status === "pod_pending");
+  const hasDebt = orders.some(countsTowardOutstanding);
 
   useEffect(() => {
     async function loadOrders() {
@@ -207,8 +204,7 @@ export default function OrdersPage() {
       <div className="space-y-3">
         {orders.map((order) => {
           const status = statusConfig[order.status] ?? statusConfig.pending;
-          const payment =
-            paymentConfig[order.payment_status] ?? paymentConfig.pod_pending;
+          const payment = getPaymentStatusPresentation(order.payment_status);
           const StatusIcon = status.icon;
           const isExpanded = expandedId === order.id;
 
@@ -251,7 +247,7 @@ export default function OrdersPage() {
                       <span
                         className={cn(
                           "text-[11px] font-medium px-2 py-0.5 rounded-full",
-                          payment.color,
+                          payment.badgeClass,
                         )}
                       >
                         {payment.label}

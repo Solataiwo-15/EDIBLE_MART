@@ -9,6 +9,11 @@ import {
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
+import {
+  isSettledPaymentStatus,
+  isOutstandingPaymentStatus,
+  getPaymentStatusPresentation,
+} from "@/lib/payment-status";
 
 interface RecentOrder {
   id: string;
@@ -32,21 +37,33 @@ export default async function AdminDashboardPage() {
     .limit(1)
     .single();
 
-  // Stats for current cycle
+  // Stats for current cycle — exclude cancelled orders
   const { data: cycleOrders } = await supabase
     .from("orders")
     .select("id, total_amount, payment_status, status, delivery_type")
-    .eq("cycle_id", cycle?.id ?? "");
+    .eq("cycle_id", cycle?.id ?? "")
+    .neq("status", "cancelled");
 
-  const totalOrders = cycleOrders?.length ?? 0;
-  const totalRevenue =
-    cycleOrders?.reduce((sum, o) => sum + o.total_amount, 0) ?? 0;
-  const unpaidCount =
-    cycleOrders?.filter((o) => o.payment_status === "pod_pending").length ?? 0;
-  const deliveryCount =
-    cycleOrders?.filter((o) => o.delivery_type === "delivery").length ?? 0;
-  const pickupCount =
-    cycleOrders?.filter((o) => o.delivery_type === "pickup").length ?? 0;
+  const activeOrders = cycleOrders ?? [];
+
+  const totalOrders = activeOrders.length;
+  const totalRevenue = activeOrders
+    .filter((o) => isSettledPaymentStatus(o.payment_status))
+    .reduce((sum, o) => sum + o.total_amount, 0);
+  const unpaidOrders = activeOrders.filter((o) =>
+    isOutstandingPaymentStatus(o.payment_status),
+  );
+  const unpaidCount = unpaidOrders.length;
+  const outstandingAmount = unpaidOrders.reduce(
+    (sum, o) => sum + o.total_amount,
+    0,
+  );
+  const deliveryCount = activeOrders.filter(
+    (o) => o.delivery_type === "delivery",
+  ).length;
+  const pickupCount = activeOrders.filter(
+    (o) => o.delivery_type === "pickup",
+  ).length;
   const slotsLeft = cycle ? cycle.order_limit - cycle.current_orders : 0;
 
   // Total customers
@@ -141,7 +158,11 @@ export default async function AdminDashboardPage() {
           color="green"
         />
         <StatCard
-          label="Unpaid"
+          label={
+            outstandingAmount > 0
+              ? `Unpaid · ₦${outstandingAmount.toLocaleString()}`
+              : "Unpaid"
+          }
           value={unpaidCount}
           icon={AlertCircle}
           color={unpaidCount > 0 ? "orange" : "green"}
@@ -197,15 +218,14 @@ export default async function AdminDashboardPage() {
                   <div className="flex items-center gap-2 mt-0.5">
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                        order.payment_status === "paid" ||
-                        order.payment_status === "pod_settled"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
+                        getPaymentStatusPresentation(order.payment_status)
+                          .badgeClass
                       }`}
                     >
-                      {order.payment_status === "pod_pending"
-                        ? "Unpaid"
-                        : "Paid"}
+                      {
+                        getPaymentStatusPresentation(order.payment_status)
+                          .label
+                      }
                     </span>
                     <span className="text-[10px] text-muted-foreground capitalize">
                       {order.delivery_type}

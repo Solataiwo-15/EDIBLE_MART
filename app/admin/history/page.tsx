@@ -19,6 +19,11 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  countsTowardOutstanding,
+  countsTowardRevenue,
+  getPaymentStatusPresentation,
+} from "@/lib/payment-status";
 
 type CycleOrder = {
   id: string;
@@ -26,6 +31,7 @@ type CycleOrder = {
   recipient_name: string;
   payment_method: string;
   payment_status: string;
+  status: string;
   delivery_type: string;
   delivery_fee: number;
   total_amount: number;
@@ -178,20 +184,19 @@ export default function AdminHistoryPage() {
       );
       y += 10;
 
-      // ── Summary stats ──
-      const totalRevenue = orders.reduce((s, o) => s + o.total_amount, 0);
-      const paidCount = orders.filter(
-        (o) =>
-          o.payment_status === "paid" || o.payment_status === "pod_settled",
-      ).length;
-      const unpaidCount = orders.filter(
-        (o) => o.payment_status === "pod_pending",
-      ).length;
-      const deliveryCount = orders.filter(
+      // ── Summary stats ── cancelled orders are excluded from every total
+      const activeOrders = orders.filter((o) => o.status !== "cancelled");
+      const totalRevenue = activeOrders
+        .filter(countsTowardRevenue)
+        .reduce((s, o) => s + o.total_amount, 0);
+      const paidCount = activeOrders.filter(countsTowardRevenue).length;
+      const outstandingOrders = activeOrders.filter(countsTowardOutstanding);
+      const outstandingAmount = outstandingOrders.reduce(
+        (s, o) => s + o.total_amount,
+        0,
+      );
+      const deliveryCount = activeOrders.filter(
         (o) => o.delivery_type === "delivery",
-      ).length;
-      const pickupCount = orders.filter(
-        (o) => o.delivery_type === "pickup",
       ).length;
 
       // Stats row
@@ -200,7 +205,10 @@ export default function AdminHistoryPage() {
       const statData = [
         { label: "Revenue", value: `N${totalRevenue.toLocaleString()}` },
         { label: "Paid", value: String(paidCount) },
-        { label: "Unpaid", value: String(unpaidCount) },
+        {
+          label: "Outstanding",
+          value: `N${outstandingAmount.toLocaleString()}`,
+        },
         { label: "Delivery", value: String(deliveryCount) },
       ];
       statData.forEach((stat, i) => {
@@ -290,22 +298,10 @@ export default function AdminHistoryPage() {
           y + 5,
         );
 
-        const payLabel =
-          order.payment_status === "paid"
-            ? "Paid"
-            : order.payment_status === "pod_settled"
-              ? "Settled"
-              : order.payment_status === "waived"
-                ? "Waived"
-                : "Unpaid";
+        const payment = getPaymentStatusPresentation(order.payment_status);
 
-        // Color payment status
-        if (order.payment_status === "pod_pending") {
-          doc.setTextColor(200, 50, 50);
-        } else {
-          doc.setTextColor(30, 130, 70);
-        }
-        doc.text(payLabel, cols.payment, y + 5);
+        doc.setTextColor(...payment.pdfColor);
+        doc.text(payment.label, cols.payment, y + 5);
         doc.setTextColor(0, 0, 0);
 
         doc.setFont("helvetica", "bold");
@@ -380,10 +376,11 @@ export default function AdminHistoryPage() {
           const isExpanded = expandedId === cycle.id;
           const orders = cycle.orders ?? [];
           const isLoaded = cycle.loaded;
-          const revenue = orders.reduce((s, o) => s + o.total_amount, 0);
-          const unpaid = orders.filter(
-            (o) => o.payment_status === "pod_pending",
-          ).length;
+          const activeOrders = orders.filter((o) => o.status !== "cancelled");
+          const revenue = activeOrders
+            .filter(countsTowardRevenue)
+            .reduce((s, o) => s + o.total_amount, 0);
+          const unpaid = activeOrders.filter(countsTowardOutstanding).length;
           const isOpen = cycle.status === "open";
 
           return (
@@ -498,18 +495,14 @@ export default function AdminHistoryPage() {
                               <span
                                 className={cn(
                                   "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                                  order.payment_status === "pod_pending"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-green-100 text-green-800",
+                                  getPaymentStatusPresentation(order.payment_status)
+                                    .badgeClass,
                                 )}
                               >
-                                {order.payment_status === "pod_pending"
-                                  ? "Unpaid"
-                                  : order.payment_status === "paid"
-                                    ? "Paid"
-                                    : order.payment_status === "pod_settled"
-                                      ? "Settled"
-                                      : "Waived"}
+                                {
+                                  getPaymentStatusPresentation(order.payment_status)
+                                    .label
+                                }
                               </span>
                               <span className="text-[10px] text-muted-foreground capitalize">
                                 {order.delivery_type}

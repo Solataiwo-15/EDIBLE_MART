@@ -1,3 +1,7 @@
+import type { PaymentStatus } from './payment-status'
+
+export type { PaymentStatus }
+
 export type Profile = {
   id: string
   full_name: string
@@ -64,7 +68,7 @@ export type Order = {
   recipient_name: string
   status: 'pending' | 'confirmed' | 'processing' | 'ready' | 'delivered' | 'cancelled'
   payment_method: 'pay_now' | 'bank_transfer' | 'pay_on_delivery'
-  payment_status: 'paid' | 'pod_pending' | 'pod_settled' | 'waived'
+  payment_status: PaymentStatus
   delivery_type: 'delivery' | 'pickup'
   location_id: string | null
   delivery_fee: number

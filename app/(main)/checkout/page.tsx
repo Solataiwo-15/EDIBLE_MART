@@ -33,6 +33,8 @@ export default function CheckoutPage() {
   const [locations, setLocations] = useState<LocationAxis[]>([]);
   const [cycle, setCycle] = useState<BookingCycle | null>(null);
   const [hasDebt, setHasDebt] = useState(false);
+  // Fail-closed: debt verification must succeed before checkout may proceed.
+  const [debtCheckFailed, setDebtCheckFailed] = useState(false);
 
   const [recipientName, setRecipientName] = useState("");
   const [deliveryType, setDeliveryType] = useState<DeliveryType>("pickup");
@@ -89,13 +91,25 @@ export default function CheckoutPage() {
         .single();
       setCycle(cycleData);
 
-      // Check for unpaid debt
-      const { data: debtOrders } = await supabase
+      // Check for unpaid debt. Cancelled orders never count as debt.
+      // TODO: Once the database enum includes 'pending', replace this with:
+      //   .in("payment_status", OUTSTANDING_PAYMENT_STATUSES)
+      // For now, pod_pending is the only outstanding status available in the database enum.
+      const { data: debtOrders, error: debtError } = await supabase
         .from("orders")
         .select("id")
         .eq("user_id", user.id)
         .eq("payment_status", "pod_pending")
+        .neq("status", "cancelled")
         .limit(1);
+
+      // A failed debt check must never be treated as "no debt".
+      if (debtError) {
+        setDebtCheckFailed(true);
+        setPageLoading(false);
+        return;
+      }
+
       setHasDebt((debtOrders?.length ?? 0) > 0);
 
       setPageLoading(false);
@@ -104,6 +118,13 @@ export default function CheckoutPage() {
   }, []);
 
   async function handleSubmit() {
+    // Fail-closed: never create an order when debt verification did not succeed.
+    if (debtCheckFailed || hasDebt) {
+      toast.error(
+        "We couldn't confirm your payment status. Please reload and try again.",
+      );
+      return;
+    }
     if (!recipientName.trim()) {
       toast.error("Please enter a recipient name");
       return;
@@ -199,6 +220,44 @@ export default function CheckoutPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // ── Fail-closed debt-verification wall ──
+  // If we could not confirm the customer's payment standing, checkout must not
+  // proceed. An error is never interpreted as "no outstanding balance".
+  if (debtCheckFailed) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-20 space-y-6">
+        <div className="rounded-2xl bg-orange-50 border border-orange-200 p-6 text-center space-y-4">
+          <div className="w-14 h-14 rounded-full bg-orange-100 flex items-center justify-center mx-auto">
+            <Wallet className="w-6 h-6 text-orange-600" />
+          </div>
+          <div>
+            <h2 className="font-bold text-base text-orange-900">
+              Couldn&apos;t verify your payment status
+            </h2>
+            <p className="text-sm text-orange-800 mt-2 leading-relaxed">
+              We were unable to confirm whether you have an outstanding balance,
+              so checkout can&apos;t continue right now. Your cart has been
+              saved. Please try again in a moment.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              onClick={() => window.location.reload()}
+              className="cursor-pointer"
+            >
+              Try again
+            </Button>
+            <Link href="/cart">
+              <Button variant="outline" className="w-full cursor-pointer">
+                Back to cart
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -429,7 +488,6 @@ function Section({
 
 /* ── Payment option button ── */
 function PaymentOption({
-  value,
   selected,
   onSelect,
   label,

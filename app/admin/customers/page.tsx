@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  countsTowardOutstanding,
+  countsTowardRevenue,
+  getPaymentStatusPresentation,
+} from "@/lib/payment-status";
 
 type CustomerOrder = {
   id: string;
@@ -73,13 +78,13 @@ export default function AdminCustomersPage() {
     const matchesSearch =
       c.full_name.toLowerCase().includes(search.toLowerCase()) ||
       (c.phone ?? "").includes(search);
-    const hasDebt = c.orders.some((o) => o.payment_status === "pod_pending");
+    const hasDebt = c.orders.some(countsTowardOutstanding);
     const matchesFilter = filter === "all" ? true : hasDebt;
     return matchesSearch && matchesFilter;
   });
 
   const debtCount = customers.filter((c) =>
-    c.orders.some((o) => o.payment_status === "pod_pending"),
+    c.orders.some(countsTowardOutstanding),
   ).length;
 
   if (loading) {
@@ -143,11 +148,9 @@ export default function AdminCustomersPage() {
           </p>
         )}
         {filtered.map((customer) => {
-          const hasDebt = customer.orders.some(
-            (o) => o.payment_status === "pod_pending",
-          );
+          const hasDebt = customer.orders.some(countsTowardOutstanding);
           const totalSpent = customer.orders
-            .filter((o) => o.status !== "cancelled")
+            .filter(countsTowardRevenue)
             .reduce((sum, o) => sum + o.total_amount, 0);
           const isExpanded = expandedId === customer.id;
 
@@ -246,18 +249,14 @@ export default function AdminCustomersPage() {
                               <span
                                 className={cn(
                                   "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                                  order.payment_status === "pod_pending"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-green-100 text-green-800",
+                                  getPaymentStatusPresentation(order.payment_status)
+                                    .badgeClass,
                                 )}
                               >
-                                {order.payment_status === "pod_pending"
-                                  ? "Unpaid"
-                                  : order.payment_status === "paid"
-                                    ? "Paid"
-                                    : order.payment_status === "pod_settled"
-                                      ? "Settled"
-                                      : "Waived"}
+                                {
+                                  getPaymentStatusPresentation(order.payment_status)
+                                    .label
+                                }
                               </span>
                               <span className="text-[10px] text-muted-foreground capitalize">
                                 {order.delivery_type}

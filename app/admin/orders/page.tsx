@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -26,6 +25,12 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  ASSIGNABLE_PAYMENT_STATUS_OPTIONS,
+  getPaymentStatusPresentation,
+  isOutstandingPaymentStatus,
+  isSettledPaymentStatus,
+} from "@/lib/payment-status";
 
 type OrderItem = {
   id: string;
@@ -102,16 +107,7 @@ const statusOptions = [
   },
 ];
 
-const paymentStatusOptions = [
-  { value: "paid", label: "Paid", color: "bg-green-100 text-green-800" },
-  { value: "pod_pending", label: "Unpaid", color: "bg-red-100 text-red-800" },
-  {
-    value: "pod_settled",
-    label: "Settled",
-    color: "bg-green-100 text-green-800",
-  },
-  { value: "waived", label: "Waived", color: "bg-gray-100 text-gray-600" },
-];
+const paymentStatusOptions = ASSIGNABLE_PAYMENT_STATUS_OPTIONS;
 
 type FilterType = "all" | "paid" | "unpaid" | "delivery" | "pickup";
 
@@ -212,6 +208,10 @@ export default function AdminOrdersPage() {
 
   const selectedCycle = cycles.find((c) => c.id === selectedCycleId);
 
+  // Cancelled orders never count toward paid/unpaid or delivery/pickup totals.
+  // They remain visible under the "All" tab so admins can still find them.
+  const activeOrders = orders.filter((o) => o.status !== "cancelled");
+
   const filtered = orders.filter((order) => {
     const matchesSearch =
       order.recipient_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -220,19 +220,21 @@ export default function AdminOrdersPage() {
         .toLowerCase()
         .includes(search.toLowerCase());
 
+    if (filter === "all") return matchesSearch;
+
+    // Every non-"all" tab is a working list of live orders only.
+    if (order.status === "cancelled") return false;
+
     const matchesFilter =
-      filter === "all"
-        ? true
-        : filter === "paid"
-          ? order.payment_status === "paid" ||
-            order.payment_status === "pod_settled"
-          : filter === "unpaid"
-            ? order.payment_status === "pod_pending"
-            : filter === "delivery"
-              ? order.delivery_type === "delivery"
-              : filter === "pickup"
-                ? order.delivery_type === "pickup"
-                : true;
+      filter === "paid"
+        ? isSettledPaymentStatus(order.payment_status)
+        : filter === "unpaid"
+          ? isOutstandingPaymentStatus(order.payment_status)
+          : filter === "delivery"
+            ? order.delivery_type === "delivery"
+            : filter === "pickup"
+              ? order.delivery_type === "pickup"
+              : true;
 
     return matchesSearch && matchesFilter;
   });
@@ -241,19 +243,19 @@ export default function AdminOrdersPage() {
     { value: "all", label: `All (${orders.length})` },
     {
       value: "delivery",
-      label: `Delivery (${orders.filter((o) => o.delivery_type === "delivery").length})`,
+      label: `Delivery (${activeOrders.filter((o) => o.delivery_type === "delivery").length})`,
     },
     {
       value: "pickup",
-      label: `Pickup (${orders.filter((o) => o.delivery_type === "pickup").length})`,
+      label: `Pickup (${activeOrders.filter((o) => o.delivery_type === "pickup").length})`,
     },
     {
       value: "unpaid",
-      label: `Unpaid (${orders.filter((o) => o.payment_status === "pod_pending").length})`,
+      label: `Unpaid (${activeOrders.filter((o) => isOutstandingPaymentStatus(o.payment_status)).length})`,
     },
     {
       value: "paid",
-      label: `Paid (${orders.filter((o) => o.payment_status === "paid" || o.payment_status === "pod_settled").length})`,
+      label: `Paid (${activeOrders.filter((o) => isSettledPaymentStatus(o.payment_status)).length})`,
     },
   ];
 
@@ -354,10 +356,9 @@ export default function AdminOrdersPage() {
             const statusCfg =
               statusOptions.find((s) => s.value === order.status) ??
               statusOptions[0];
-            const paymentCfg =
-              paymentStatusOptions.find(
-                (p) => p.value === order.payment_status,
-              ) ?? paymentStatusOptions[1];
+            const paymentCfg = getPaymentStatusPresentation(
+              order.payment_status,
+            );
             const StatusIcon = statusCfg.icon;
             const isExpanded = expandedId === order.id;
             const isUpdating = updatingId === order.id;
@@ -399,7 +400,7 @@ export default function AdminOrdersPage() {
                         <span
                           className={cn(
                             "text-[10px] font-medium px-2 py-0.5 rounded-full",
-                            paymentCfg.color,
+                            paymentCfg.badgeClass,
                           )}
                         >
                           {paymentCfg.label}
