@@ -33,10 +33,15 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const supabase = createClient();
+    let active = true;
+    let subscription: { unsubscribe: () => void } | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     // Method 1: Check if there's already a valid session with recovery type
     // This happens when Supabase redirects back with a hash token
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!active) return;
+
       if (session) {
         setStatus("ready");
         return;
@@ -44,9 +49,8 @@ export default function ResetPasswordPage() {
 
       // Method 2: Listen for PASSWORD_RECOVERY event
       // This fires when Supabase processes the hash/code from the URL
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((event, session) => {
+      const listener = supabase.auth.onAuthStateChange((event, session) => {
+        if (!active) return;
         if (
           event === "PASSWORD_RECOVERY" ||
           (event === "SIGNED_IN" && session)
@@ -54,26 +58,36 @@ export default function ResetPasswordPage() {
           setStatus("ready");
         }
       });
+      subscription = listener.data.subscription;
+
+      // If the component unmounted while getSession was resolving, tear down now
+      if (!active) {
+        subscription.unsubscribe();
+        return;
+      }
 
       // Method 3: If URL has a code param (PKCE flow), exchange it
       const code = new URLSearchParams(window.location.search).get("code");
       if (code) {
         supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+          if (!active) return;
           if (error) setStatus("invalid");
           else setStatus("ready");
         });
       }
 
       // Timeout — if nothing resolves in 8 seconds, show invalid
-      const timeout = setTimeout(() => {
+      timeout = setTimeout(() => {
+        if (!active) return;
         setStatus((prev) => (prev === "verifying" ? "invalid" : prev));
       }, 8000);
-
-      return () => {
-        subscription.unsubscribe();
-        clearTimeout(timeout);
-      };
     });
+
+    return () => {
+      active = false;
+      subscription?.unsubscribe();
+      if (timeout) clearTimeout(timeout);
+    };
   }, []);
 
   function validate() {
