@@ -5,9 +5,13 @@
  * *outstanding* (money is still owed). `waived` is settled: management has
  * financially settled the order, so it behaves exactly like money received.
  *
- * Cancellation is tracked separately on `orders.status` — it is never encoded
- * in `payment_status`. Reporting must exclude cancelled orders via
- * `isActiveOrderStatus` in addition to filtering on payment status.
+ * These two classifications drive payment badges, debt checks, paid/unpaid
+ * filters, and outstanding totals. They do **not** determine revenue.
+ *
+ * Revenue is the total value of every non-cancelled order, regardless of
+ * payment status — an unpaid active order is still revenue. Cancellation is
+ * tracked separately on `orders.status`, never encoded in `payment_status`,
+ * and is the only thing that removes an order from revenue.
  */
 
 export type PaymentStatus =
@@ -17,7 +21,10 @@ export type PaymentStatus =
   | 'pod_settled'
   | 'waived'
 
-/** Money received, or treated as received. Counts toward revenue. */
+/**
+ * Money received, or treated as received. Drives paid badges and the paid
+ * filter — not revenue, which counts active orders regardless of payment.
+ */
 export const SETTLED_PAYMENT_STATUSES = [
   'paid',
   'pod_settled',
@@ -58,15 +65,18 @@ export function isActiveOrderStatus(status: string | null | undefined) {
   return status !== 'cancelled'
 }
 
-/** Counts toward revenue: not cancelled, and settled. */
+/**
+ * Counts toward revenue: every non-cancelled order, regardless of payment_status.
+ *
+ * Revenue is the total value of active orders. Whether the payment is settled or
+ * outstanding does not determine whether an order counts — only cancellation excludes
+ * an order from revenue.
+ */
 export function countsTowardRevenue(order: {
   status?: string | null
   payment_status?: string | null
 }) {
-  return (
-    isActiveOrderStatus(order.status) &&
-    isSettledPaymentStatus(order.payment_status)
-  )
+  return isActiveOrderStatus(order.status)
 }
 
 /** Counts toward outstanding balance: not cancelled, and unpaid. */

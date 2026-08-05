@@ -10,7 +10,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import {
-  isSettledPaymentStatus,
   isOutstandingPaymentStatus,
   getPaymentStatusPresentation,
 } from "@/lib/payment-status";
@@ -47,9 +46,8 @@ export default async function AdminDashboardPage() {
   const activeOrders = cycleOrders ?? [];
 
   const totalOrders = activeOrders.length;
-  const totalRevenue = activeOrders
-    .filter((o) => isSettledPaymentStatus(o.payment_status))
-    .reduce((sum, o) => sum + o.total_amount, 0);
+  // Revenue is every active order, paid or not. Only cancellation excludes an order.
+  const totalRevenue = activeOrders.reduce((sum, o) => sum + o.total_amount, 0);
   const unpaidOrders = activeOrders.filter((o) =>
     isOutstandingPaymentStatus(o.payment_status),
   );

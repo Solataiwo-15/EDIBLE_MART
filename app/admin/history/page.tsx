@@ -21,7 +21,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   countsTowardOutstanding,
-  countsTowardRevenue,
+  isSettledPaymentStatus,
   getPaymentStatusPresentation,
 } from "@/lib/payment-status";
 
@@ -186,10 +186,11 @@ export default function AdminHistoryPage() {
 
       // ── Summary stats ── cancelled orders are excluded from every total
       const activeOrders = orders.filter((o) => o.status !== "cancelled");
-      const totalRevenue = activeOrders
-        .filter(countsTowardRevenue)
-        .reduce((s, o) => s + o.total_amount, 0);
-      const paidCount = activeOrders.filter(countsTowardRevenue).length;
+      // Revenue is every active order, paid or not.
+      const totalRevenue = activeOrders.reduce((s, o) => s + o.total_amount, 0);
+      const paidCount = activeOrders.filter((o) =>
+        isSettledPaymentStatus(o.payment_status),
+      ).length;
       const outstandingOrders = activeOrders.filter(countsTowardOutstanding);
       const outstandingAmount = outstandingOrders.reduce(
         (s, o) => s + o.total_amount,
@@ -377,9 +378,8 @@ export default function AdminHistoryPage() {
           const orders = cycle.orders ?? [];
           const isLoaded = cycle.loaded;
           const activeOrders = orders.filter((o) => o.status !== "cancelled");
-          const revenue = activeOrders
-            .filter(countsTowardRevenue)
-            .reduce((s, o) => s + o.total_amount, 0);
+          // Revenue is every active order, paid or not.
+          const revenue = activeOrders.reduce((s, o) => s + o.total_amount, 0);
           const unpaid = activeOrders.filter(countsTowardOutstanding).length;
           const isOpen = cycle.status === "open";
 

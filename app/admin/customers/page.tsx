@@ -18,7 +18,6 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   countsTowardOutstanding,
-  countsTowardRevenue,
   getPaymentStatusPresentation,
 } from "@/lib/payment-status";
 
@@ -149,8 +148,9 @@ export default function AdminCustomersPage() {
         )}
         {filtered.map((customer) => {
           const hasDebt = customer.orders.some(countsTowardOutstanding);
+          // Customer spending is every active order, paid or not.
           const totalSpent = customer.orders
-            .filter(countsTowardRevenue)
+            .filter((o) => o.status !== "cancelled")
             .reduce((sum, o) => sum + o.total_amount, 0);
           const isExpanded = expandedId === customer.id;
 
