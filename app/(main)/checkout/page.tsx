@@ -18,7 +18,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, User, Truck, Wallet } from "lucide-react";
+import {
+  Loader2,
+  ArrowLeft,
+  User,
+  Truck,
+  Wallet,
+  AlertTriangle,
+} from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +43,13 @@ export default function CheckoutPage() {
   const [hasDebt, setHasDebt] = useState(false);
   // Fail-closed: debt verification must succeed before checkout may proceed.
   const [debtCheckFailed, setDebtCheckFailed] = useState(false);
+  // Set when an order was created but could not be confirmed. The order and its
+  // items already exist and stock has already been deducted, so this session
+  // must never create a second order — only support can resolve it.
+  const [confirmationFailedOrder, setConfirmationFailedOrder] = useState<{
+    id: string;
+    orderNumber: number | null;
+  } | null>(null);
 
   const [recipientName, setRecipientName] = useState("");
   const [deliveryType, setDeliveryType] = useState<DeliveryType>("pickup");
@@ -118,6 +132,9 @@ export default function CheckoutPage() {
   }, []);
 
   async function handleSubmit() {
+    // An order already exists from a failed confirmation. Creating another
+    // would duplicate it and deduct stock twice.
+    if (confirmationFailedOrder) return;
     // Fail-closed: never create an order when debt verification did not succeed.
     if (debtCheckFailed || hasDebt) {
       toast.error(
@@ -192,11 +209,43 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Confirm order
-    await supabase
-      .from("orders")
-      .update({ status: "confirmed" })
-      .eq("id", order.id);
+    // Confirm the order via a SECURITY DEFINER function. The customer has no
+    // direct UPDATE path to 'confirmed' — the function enforces ownership and
+    // the pending precondition server-side, and returns the confirmed order ID.
+    // The function is idempotent, so retrying the same order ID is safe.
+    async function confirmOrder(orderId: string) {
+      const { data, error } = await supabase.rpc("confirm_own_pending_order", {
+        p_order_id: orderId,
+      });
+      return { confirmedId: data, error };
+    }
+
+    let confirmation = await confirmOrder(order.id);
+
+    // Retry once — only the confirmation, never order or item creation.
+    if (confirmation.error || confirmation.confirmedId !== order.id) {
+      console.error(
+        "Order confirmation failed, retrying once:",
+        confirmation.error,
+      );
+      confirmation = await confirmOrder(order.id);
+    }
+
+    // Fail closed. The order and its items already exist and stock has already
+    // been deducted by the trigger, so we must not offer a checkout retry —
+    // that would duplicate the order. Hand off to support instead.
+    if (confirmation.error || confirmation.confirmedId !== order.id) {
+      console.error(
+        "Order confirmation failed after retry:",
+        confirmation.error,
+      );
+      setConfirmationFailedOrder({
+        id: order.id,
+        orderNumber: order.order_number ?? null,
+      });
+      setLoading(false);
+      return;
+    }
 
     clearCart();
 
@@ -220,6 +269,51 @@ export default function CheckoutPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // ── Confirmation-failure recovery wall ──
+  // The order exists and stock is already deducted, but it could not be moved
+  // out of 'pending'. This screen blocks any further submission so the customer
+  // cannot create a duplicate. Only support can resolve the existing order.
+  if (confirmationFailedOrder) {
+    const reference =
+      confirmationFailedOrder.orderNumber != null
+        ? `EDM${String(confirmationFailedOrder.orderNumber).padStart(3, "0")}`
+        : confirmationFailedOrder.id;
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-20 space-y-6">
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-6 text-center space-y-4">
+          <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6 text-amber-700" />
+          </div>
+          <div>
+            <h2 className="font-bold text-base text-amber-900">
+              Your order was created but not confirmed
+            </h2>
+            <p className="text-sm text-amber-800 mt-2 leading-relaxed">
+              We saved your order, but couldn&apos;t finish confirming it.
+              Please contact us on WhatsApp with the reference below and
+              we&apos;ll complete it for you.
+            </p>
+            <p className="text-sm text-amber-900 mt-3">
+              Do <strong>not</strong> place the order again — it already exists,
+              and ordering again would create a duplicate.
+            </p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-amber-100">
+            <p className="text-xs text-muted-foreground">Order reference</p>
+            <p className="font-bold text-lg tracking-wider break-all">
+              {reference}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 pt-2">
+            <Link href="/orders">
+              <Button className="w-full cursor-pointer">View my orders</Button>
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
