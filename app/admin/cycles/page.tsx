@@ -16,9 +16,18 @@ import {
   ChevronDown,
   ChevronUp,
   Mail,
+  Package,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Cycle = {
   id: string;
@@ -39,6 +48,12 @@ export default function AdminCyclesPage() {
   const [creating, setCreating] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [emailing, setEmailing] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [processingDialog, setProcessingDialog] = useState<{
+    open: boolean;
+    cycleId: string;
+    cycleTitle: string;
+  }>({ open: false, cycleId: "", cycleTitle: "" });
 
   const [newCycle, setNewCycle] = useState({
     title: "",
@@ -156,6 +171,36 @@ export default function AdminCyclesPage() {
       toast.error("Failed to send email blast. Please try again.");
     } finally {
       setEmailing(false);
+    }
+  }
+
+  async function startProcessing(cycleId: string) {
+    setProcessing(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("orders")
+        .update({ status: "processing" })
+        .eq("cycle_id", cycleId)
+        .eq("status", "confirmed")
+        .select("id");
+
+      if (error) {
+        toast.error("Failed to start processing");
+      } else {
+        const count = data?.length ?? 0;
+        if (count === 0) {
+          toast.info("No confirmed orders to process in this cycle");
+        } else {
+          toast.success(`Started processing ${count} order${count === 1 ? "" : "s"}`);
+        }
+      }
+    } catch (err) {
+      console.error("Start processing failed:", err);
+      toast.error("Failed to start processing");
+    } finally {
+      setProcessing(false);
+      setProcessingDialog((d) => ({ ...d, open: false }));
     }
   }
 
@@ -449,6 +494,29 @@ export default function AdminCyclesPage() {
                       {isOpen ? "Close bookings" : "Open bookings"}
                     </Button>
 
+                    {/* Start Processing — cycle-level action */}
+                    {cycle.current_orders > 0 && (
+                      <Button
+                        variant="outline"
+                        className="w-full cursor-pointer gap-2"
+                        onClick={() =>
+                          setProcessingDialog({
+                            open: true,
+                            cycleId: cycle.id,
+                            cycleTitle: cycle.title,
+                          })
+                        }
+                        disabled={processing}
+                      >
+                        {processing ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Package className="w-4 h-4" />
+                        )}
+                        Start Processing
+                      </Button>
+                    )}
+
                     {/* Email blast — only when opening or already open */}
                     {isOpen && (
                       <Button
@@ -478,6 +546,47 @@ export default function AdminCyclesPage() {
           );
         })}
       </div>
+
+      {/* ── Start Processing confirmation ── */}
+      <Dialog
+        open={processingDialog.open}
+        onOpenChange={(open) =>
+          setProcessingDialog((d) => ({ ...d, open }))
+        }
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Start processing orders?</DialogTitle>
+            <DialogDescription>
+              This will change all <strong>confirmed</strong> orders in{" "}
+              <strong>{processingDialog.cycleTitle}</strong> to processing.
+              Orders that are pending, cancelled, already processing, ready, or
+              delivered will not be affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() =>
+                setProcessingDialog((d) => ({ ...d, open: false }))
+              }
+            >
+              Cancel
+            </Button>
+            <Button
+              className="cursor-pointer"
+              onClick={() => startProcessing(processingDialog.cycleId)}
+              disabled={processing}
+            >
+              {processing && (
+                <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+              )}
+              Start Processing
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

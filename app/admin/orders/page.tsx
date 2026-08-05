@@ -22,7 +22,16 @@ import {
   Truck,
   Package,
   XCircle,
+  Loader2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
@@ -121,6 +130,12 @@ export default function AdminOrdersPage() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    orderId: string;
+    orderRef: string;
+    action: "cancel" | "restore";
+  }>({ open: false, orderId: "", orderRef: "", action: "cancel" });
 
   // Load all cycles on mount
   useEffect(() => {
@@ -195,6 +210,51 @@ export default function AdminOrdersPage() {
       );
     }
     setUpdatingId(null);
+  }
+
+  // Explicit order-status transition. Only the status column is touched —
+  // payment_status, total_amount, order_number and items are never changed.
+  async function changeStatus(orderId: string, nextStatus: AdminOrder["status"]): Promise<boolean> {
+    setUpdatingId(orderId);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("orders")
+        .update({ status: nextStatus })
+        .eq("id", orderId);
+
+      if (error) {
+        toast.error("Failed to update order status");
+        return false;
+      }
+
+      toast.success("Order status updated");
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)),
+      );
+      return true;
+    } catch (err) {
+      console.error("Order status update error:", err);
+      toast.error("Failed to update order status");
+      return false;
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  function orderRef(order: AdminOrder) {
+    return `EDM${String(order.order_number).padStart(3, "0")}`;
+  }
+
+  async function runConfirmDialogAction() {
+    const { orderId, action } = confirmDialog;
+    const success = await changeStatus(
+      orderId,
+      action === "cancel" ? "cancelled" : "confirmed"
+    );
+    if (success) {
+      setConfirmDialog((d) => ({ ...d, open: false }));
+    }
   }
 
   async function saveNote(orderId: string, note: string) {
@@ -479,64 +539,61 @@ export default function AdminOrdersPage() {
                         Update order
                       </p>
 
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">
-                            Order status
-                          </p>
-                          <Select
-                            value={order.status}
-                            onValueChange={(v) =>
-                              updateOrderStatus(order.id, "status", v)
-                            }
-                            disabled={isUpdating}
-                          >
-                            <SelectTrigger className="h-9 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {statusOptions.map((opt) => (
-                                <SelectItem
-                                  key={opt.value}
-                                  value={opt.value}
-                                  className="text-xs"
-                                >
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">
+                          Order status
+                        </p>
+                        <OrderStatusActions
+                          order={order}
+                          isUpdating={isUpdating}
+                          onAdvance={changeStatus}
+                          onCancel={() =>
+                            setConfirmDialog({
+                              open: true,
+                              orderId: order.id,
+                              orderRef: orderRef(order),
+                              action: "cancel",
+                            })
+                          }
+                          onRestore={() =>
+                            setConfirmDialog({
+                              open: true,
+                              orderId: order.id,
+                              orderRef: orderRef(order),
+                              action: "restore",
+                            })
+                          }
+                        />
+                      </div>
 
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">
-                            Payment status
-                          </p>
-                          <Select
-                            value={toAssignablePaymentStatus(
-                              order.payment_status,
-                            )}
-                            onValueChange={(v) =>
-                              updateOrderStatus(order.id, "payment_status", v)
-                            }
-                            disabled={isUpdating}
-                          >
-                            <SelectTrigger className="h-9 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {paymentStatusOptions.map((opt) => (
-                                <SelectItem
-                                  key={opt.value}
-                                  value={opt.value}
-                                  className="text-xs"
-                                >
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">
+                          Payment status
+                        </p>
+                        <Select
+                          value={toAssignablePaymentStatus(
+                            order.payment_status,
+                          )}
+                          onValueChange={(v) =>
+                            updateOrderStatus(order.id, "payment_status", v)
+                          }
+                          disabled={isUpdating}
+                        >
+                          <SelectTrigger className="h-9 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentStatusOptions.map((opt) => (
+                              <SelectItem
+                                key={opt.value}
+                                value={opt.value}
+                                className="text-xs"
+                              >
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
 
                       <AdminNoteField
@@ -561,8 +618,187 @@ export default function AdminOrdersPage() {
           })}
         </div>
       )}
+
+      {/* ── Cancel / Restore confirmation ── */}
+      <Dialog
+        open={confirmDialog.open}
+        onOpenChange={(open) =>
+          setConfirmDialog((d) => ({ ...d, open }))
+        }
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {confirmDialog.action === "cancel"
+                ? "Cancel this order?"
+                : "Restore this order?"}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmDialog.action === "cancel" ? (
+                <>
+                  Order{" "}
+                  <span className="font-mono font-semibold">
+                    {confirmDialog.orderRef}
+                  </span>{" "}
+                  will be marked cancelled. The order, its items and payment
+                  record are kept, and stock is not restored.
+                </>
+              ) : (
+                <>
+                  Order{" "}
+                  <span className="font-mono font-semibold">
+                    {confirmDialog.orderRef}
+                  </span>{" "}
+                  will be restored to confirmed and counted again. Stock is not
+                  deducted again.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() =>
+                setConfirmDialog((d) => ({ ...d, open: false }))
+              }
+            >
+              Keep as is
+            </Button>
+            <Button
+              className={cn(
+                "cursor-pointer",
+                confirmDialog.action === "cancel" &&
+                  "bg-red-600 hover:bg-red-700",
+              )}
+              onClick={runConfirmDialogAction}
+              disabled={updatingId === confirmDialog.orderId}
+            >
+              {updatingId === confirmDialog.orderId && (
+                <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+              )}
+              {confirmDialog.action === "cancel"
+                ? "Cancel order"
+                : "Restore order"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+// Explicit fulfilment actions driven by the current status + delivery type.
+// The free-form status dropdown is gone; delivered is terminal.
+function OrderStatusActions({
+  order,
+  isUpdating,
+  onAdvance,
+  onCancel,
+  onRestore,
+}: {
+  order: AdminOrder;
+  isUpdating: boolean;
+  onAdvance: (orderId: string, next: string) => void;
+  onCancel: () => void;
+  onRestore: () => void;
+}) {
+  const isPickup = order.delivery_type !== "delivery";
+
+  const advanceBtn = (label: string, next: string) => (
+    <Button
+      size="sm"
+      className="h-9 text-xs cursor-pointer"
+      onClick={() => onAdvance(order.id, next)}
+      disabled={isUpdating}
+    >
+      {isUpdating && <Loader2 className="mr-1.5 w-3.5 h-3.5 animate-spin" />}
+      {label}
+    </Button>
+  );
+
+  const cancelBtn = (
+    <Button
+      size="sm"
+      variant="outline"
+      className="h-9 text-xs cursor-pointer text-red-600 border-red-200 hover:bg-red-50"
+      onClick={onCancel}
+      disabled={isUpdating}
+    >
+      Cancel Order
+    </Button>
+  );
+
+  if (order.status === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
+        <Clock className="w-3 h-3" />
+        Needs Review
+      </span>
+    );
+  }
+
+  if (order.status === "delivered") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Delivered — no further action.
+      </p>
+    );
+  }
+
+  if (order.status === "cancelled") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          className="h-9 text-xs cursor-pointer"
+          onClick={onRestore}
+          disabled={isUpdating}
+        >
+          {isUpdating && (
+            <Loader2 className="mr-1.5 w-3.5 h-3.5 animate-spin" />
+          )}
+          Restore to Confirmed
+        </Button>
+      </div>
+    );
+  }
+
+  if (order.status === "confirmed") {
+    return <div className="flex flex-wrap gap-2">{cancelBtn}</div>;
+  }
+
+  if (order.status === "processing") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        {isPickup
+          ? advanceBtn("Mark Ready", "ready")
+          : advanceBtn("Mark Delivered", "delivered")}
+        {cancelBtn}
+      </div>
+    );
+  }
+
+  if (order.status === "ready") {
+    // ready + delivery is a review case — no automatic next step
+    if (!isPickup) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
+          <Clock className="w-3 h-3" />
+          Needs Review
+        </span>
+      );
+    }
+    // ready + pickup → Mark Delivered and Cancel Order
+    return (
+      <div className="flex flex-wrap gap-2">
+        {advanceBtn("Mark Delivered", "delivered")}
+        {cancelBtn}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function AdminNoteField({
