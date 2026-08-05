@@ -144,13 +144,19 @@ export default function AdminCyclesPage() {
     slaughterDate: string,
   ) {
     setEmailing(true);
-    const { sendBookingOpenBlast } = await import("@/lib/email");
-    const result = await sendBookingOpenBlast(
-      cycleTitle,
-      format(new Date(slaughterDate), "EEEE, MMMM do"),
-    );
-    toast.success(`Email blast sent to ${result.sent} customers!`);
-    setEmailing(false);
+    try {
+      const { sendBookingOpenBlast } = await import("@/lib/email");
+      const result = await sendBookingOpenBlast(
+        cycleTitle,
+        format(new Date(slaughterDate), "EEEE, MMMM do"),
+      );
+      toast.success(`Email blast sent to ${result.sent} customers!`);
+    } catch (error) {
+      console.error("Booking open email blast failed:", error);
+      toast.error("Failed to send email blast. Please try again.");
+    } finally {
+      setEmailing(false);
+    }
   }
 
   if (loading) {
