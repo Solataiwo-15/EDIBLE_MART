@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCartStore } from "@/lib/store/cart";
 import { createClient } from "@/lib/supabase/client";
 import { LocationAxis, BookingCycle } from "@/lib/types";
+import { OUTSTANDING_PAYMENT_STATUSES } from "@/lib/payment-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,14 +93,13 @@ export default function CheckoutPage() {
       setCycle(cycleData);
 
       // Check for unpaid debt. Cancelled orders never count as debt.
-      // TODO: Once the database enum includes 'pending', replace this with:
-      //   .in("payment_status", OUTSTANDING_PAYMENT_STATUSES)
-      // For now, pod_pending is the only outstanding status available in the database enum.
+      // Both outstanding values are checked: `pending` for new orders and
+      // `pod_pending` for legacy ones.
       const { data: debtOrders, error: debtError } = await supabase
         .from("orders")
         .select("id")
         .eq("user_id", user.id)
-        .eq("payment_status", "pod_pending")
+        .in("payment_status", OUTSTANDING_PAYMENT_STATUSES)
         .neq("status", "cancelled")
         .limit(1);
 
@@ -157,7 +157,7 @@ export default function CheckoutPage() {
         recipient_name: recipientName.trim(),
         status: "pending",
         payment_method: paymentMethod,
-        payment_status: "pod_pending",
+        payment_status: "pending",
         delivery_type: deliveryType,
         location_id: deliveryType === "delivery" ? locationId : null,
         delivery_fee: deliveryFee,

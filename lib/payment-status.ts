@@ -41,13 +41,14 @@ export const OUTSTANDING_PAYMENT_STATUSES = [
 ] as const satisfies readonly PaymentStatus[]
 
 /**
- * Payment statuses an admin may assign. Limited to values the database enum
- * currently accepts — `pending` is intentionally absent until the enum and
- * checkout write path are migrated.
+ * Payment statuses an admin may assign. `pod_pending` is deliberately absent —
+ * it is a legacy value that is still read and displayed, but never written to
+ * a new order or selected from the admin dropdown. Selecting "Unpaid" writes
+ * `pending`.
  */
 export const ASSIGNABLE_PAYMENT_STATUSES = [
   'paid',
-  'pod_pending',
+  'pending',
   'pod_settled',
   'waived',
 ] as const satisfies readonly PaymentStatus[]
@@ -162,3 +163,18 @@ export const ASSIGNABLE_PAYMENT_STATUS_OPTIONS = ASSIGNABLE_PAYMENT_STATUSES.map
     color: PAYMENT_STATUS_PRESENTATION[value].badgeClass,
   }),
 )
+
+/**
+ * Maps a stored payment status onto the value the admin dropdown should show
+ * as selected. Legacy `pod_pending` orders normalize to `pending` so the
+ * control never renders an option that is not in the list — the stored value
+ * is untouched until an admin actively changes it.
+ */
+export function toAssignablePaymentStatus(
+  status: string | null | undefined,
+): PaymentStatus {
+  if (status === 'pod_pending') return 'pending'
+  return ASSIGNABLE_PAYMENT_STATUSES.includes(status as never)
+    ? (status as PaymentStatus)
+    : 'pending'
+}

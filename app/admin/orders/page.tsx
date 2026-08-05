@@ -27,6 +27,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   ASSIGNABLE_PAYMENT_STATUS_OPTIONS,
+  toAssignablePaymentStatus,
   getPaymentStatusPresentation,
   isOutstandingPaymentStatus,
   isSettledPaymentStatus,
@@ -512,7 +513,9 @@ export default function AdminOrdersPage() {
                             Payment status
                           </p>
                           <Select
-                            value={order.payment_status}
+                            value={toAssignablePaymentStatus(
+                              order.payment_status,
+                            )}
                             onValueChange={(v) =>
                               updateOrderStatus(order.id, "payment_status", v)
                             }
