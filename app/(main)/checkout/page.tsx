@@ -20,7 +20,6 @@ import { toast } from "sonner";
 import { Loader2, ArrowLeft, User, Truck, Wallet } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns/format";
 
 type PaymentMethod = "bank_transfer" | "pay_on_delivery";
 type DeliveryType = "delivery" | "pickup";
@@ -179,30 +178,20 @@ export default function CheckoutPage() {
       .eq("id", order.id);
 
     clearCart();
-    // Send confirmation email
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-    const { sendOrderConfirmation } = await import("@/lib/email");
-    await sendOrderConfirmation({
-      customerEmail: authUser?.email ?? "",
-      customerName: recipientName, // fallback to recipient name
-      recipientName: recipientName.trim(),
-      orderNumber: `EDM${String(order.order_number).padStart(3, "0")}`,
-      cycleTitle: cycle.title,
-      slaughterDate: format(new Date(cycle.slaughter_date), "EEEE, MMMM do"),
-      items: items.map((i) => ({
-        name: i.product_name,
-        variant: i.variant_name,
-        quantity: i.quantity,
-        subtotal: i.price * i.quantity,
-      })),
-      deliveryType,
-      deliveryLocation: selectedLocation?.name ?? null,
-      paymentMethod,
-      totalAmount: grandTotal,
-      deliveryFee,
-    });
+
+    // Send confirmation email. The server derives every detail from the order,
+    // so we pass only the order ID. A failure here must NOT make a successfully
+    // created order look like it failed — log it and warn non-blockingly.
+    try {
+      const { sendOrderConfirmation } = await import("@/lib/email");
+      await sendOrderConfirmation({ orderId: order.id });
+    } catch (err) {
+      console.error("Order confirmation email failed:", err);
+      toast.warning(
+        "Order placed — but we couldn't send your confirmation email. Your order is saved.",
+      );
+    }
+
     router.push(`/checkout/confirmation?order_id=${order.id}`);
   }
 

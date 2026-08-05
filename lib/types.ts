@@ -1,6 +1,7 @@
 export type Profile = {
   id: string
   full_name: string
+  email: string | null
   phone: string | null
   default_location_id: string | null
   is_admin: boolean
@@ -59,6 +60,7 @@ export type Order = {
   id: string
   user_id: string
   cycle_id: string
+  order_number: number
   recipient_name: string
   status: 'pending' | 'confirmed' | 'processing' | 'ready' | 'delivered' | 'cancelled'
   payment_method: 'pay_now' | 'bank_transfer' | 'pay_on_delivery'

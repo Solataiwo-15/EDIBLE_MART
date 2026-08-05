@@ -24,24 +24,18 @@ export async function sendBookingOpenBlast(
   return result
 }
 
-export async function sendOrderConfirmation(params: {
-  customerEmail: string
-  customerName: string
-  recipientName: string
-  orderNumber: string
-  cycleTitle: string
-  slaughterDate: string
-  items: { name: string; variant: string; quantity: number; subtotal: number }[]
-  deliveryType: string
-  deliveryLocation: string | null
-  paymentMethod: string
-  totalAmount: number
-  deliveryFee: number
-}) {
+export async function sendOrderConfirmation(params: { orderId: string }) {
   const res = await fetch('/api/email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'order_confirmation', ...params }),
+    body: JSON.stringify({ type: 'order_confirmation', orderId: params.orderId }),
   })
-  return res.json()
+
+  const result = await res.json()
+
+  if (!res.ok) {
+    throw new Error(result.error || 'Order confirmation email failed')
+  }
+
+  return result
 }
