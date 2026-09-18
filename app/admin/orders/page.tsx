@@ -119,6 +119,36 @@ const statusOptions = [
 
 const paymentStatusOptions = ASSIGNABLE_PAYMENT_STATUS_OPTIONS;
 
+const CANCEL_ERROR_MESSAGES: Record<string, string> = {
+  CANCEL_STOCK_MISMATCH:
+    "This order couldn't be cancelled because its stock records don't match.",
+  ORDER_NOT_CANCELLABLE:
+    "This order can no longer be cancelled.",
+  ORDER_NOT_FOUND:
+    "Order not found.",
+  ADMIN_REQUIRED:
+    "You don't have permission to perform this action.",
+};
+
+const RESTORE_ERROR_MESSAGES: Record<string, string> = {
+  RESTORE_STOCK_UNAVAILABLE:
+    "This order can't be restored because some items are no longer available.",
+  RESTORE_STOCK_MISMATCH:
+    "This order can't be restored because its stock records don't match.",
+  RESTORE_CYCLE_FULL:
+    "This booking cycle is already full.",
+  ORDER_NOT_RESTORABLE:
+    "This order can no longer be restored.",
+  ORDER_CYCLE_NOT_FOUND:
+    "The booking cycle for this order could not be found.",
+  ORDER_HAS_NO_ITEMS:
+    "This order has no items to restore.",
+  ORDER_NOT_FOUND:
+    "Order not found.",
+  ADMIN_REQUIRED:
+    "You don't have permission to perform this action.",
+};
+
 type FilterType = "all" | "paid" | "unpaid" | "delivery" | "pickup";
 
 export default function AdminOrdersPage() {
@@ -248,12 +278,59 @@ export default function AdminOrdersPage() {
 
   async function runConfirmDialogAction() {
     const { orderId, action } = confirmDialog;
-    const success = await changeStatus(
-      orderId,
-      action === "cancel" ? "cancelled" : "confirmed"
-    );
-    if (success) {
-      setConfirmDialog((d) => ({ ...d, open: false }));
+    const isCancel = action === "cancel";
+    const errorMessages = isCancel
+      ? CANCEL_ERROR_MESSAGES
+      : RESTORE_ERROR_MESSAGES;
+    const fallbackMessage = isCancel
+      ? "Failed to cancel order. Please try again."
+      : "Failed to restore order. Please try again.";
+
+    setUpdatingId(orderId);
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc(
+        isCancel
+          ? "cancel_order_and_restore_stock"
+          : "restore_cancelled_order_and_deduct_stock",
+        { p_order_id: orderId },
+      );
+
+      if (error) {
+        const errorCode = Object.keys(errorMessages).find((code) =>
+          error.message.includes(code),
+        );
+
+        toast.error(
+          errorCode ? errorMessages[errorCode] : fallbackMessage,
+        );
+        return;
+      }
+
+      if (data !== orderId) {
+        toast.error(fallbackMessage);
+        return;
+      }
+
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId
+            ? { ...order, status: isCancel ? "cancelled" : "confirmed" }
+            : order,
+        ),
+      );
+      setConfirmDialog((dialog) => ({ ...dialog, open: false }));
+      toast.success(
+        isCancel
+          ? "Order cancelled and stock restored"
+          : "Order restored and stock reserved",
+      );
+    } catch (error) {
+      console.error("Cancel/restore order failed:", error);
+      toast.error(fallbackMessage);
+    } finally {
+      setUpdatingId(null);
     }
   }
 
@@ -634,25 +711,14 @@ export default function AdminOrdersPage() {
                 : "Restore this order?"}
             </DialogTitle>
             <DialogDescription>
-              {confirmDialog.action === "cancel" ? (
-                <>
-                  Order{" "}
-                  <span className="font-mono font-semibold">
-                    {confirmDialog.orderRef}
-                  </span>{" "}
-                  will be marked cancelled. The order, its items and payment
-                  record are kept, and stock is not restored.
-                </>
-              ) : (
-                <>
-                  Order{" "}
-                  <span className="font-mono font-semibold">
-                    {confirmDialog.orderRef}
-                  </span>{" "}
-                  will be restored to confirmed and counted again. Stock is not
-                  deducted again.
-                </>
-              )}
+              Order{" "}
+              <span className="font-mono font-semibold">
+                {confirmDialog.orderRef}
+              </span>
+              {". "}
+              {confirmDialog.action === "cancel"
+                ? "The order will be marked cancelled and its reserved stock will become available again."
+                : "The order will be restored to confirmed. Current stock will be checked first and reserved again. If the items are no longer available, the restore will not go through."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
