@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import type { CartItem, Product, ProductVariant } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { useCartStore } from "@/lib/store/cart";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,8 @@ export default function OrdersPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const addItem = useCartStore((s) => s.addItem);
   const clearCart = useCartStore((s) => s.clearCart);
+  const rebookInFlight = useRef(false);
+  const [rebookingId, setRebookingId] = useState<string | null>(null);
 
   const hasDebt = orders.some(countsTowardOutstanding);
 
@@ -138,21 +141,200 @@ export default function OrdersPage() {
     loadOrders();
   }, []);
 
-  function handleRebook(order: OrderWithDetails) {
-    clearCart();
-    order.order_items.forEach((item) => {
-      addItem({
-        variant_id: item.product_variants.id,
-        product_name: item.product_variants.products.name,
-        variant_name:
-          item.product_variants.name +
-          (item.with_inu_eran ? " + Inu Eran" : ""),
-        price: item.product_variants.price,
-        quantity: item.quantity,
-        with_inu_eran: item.with_inu_eran,
+  async function handleRebook(order: OrderWithDetails) {
+    if (rebookInFlight.current) return;
+
+    rebookInFlight.current = true;
+    setRebookingId(order.id);
+
+    const rebookItems: CartItem[] = [];
+    const notices: string[] = [];
+
+    try {
+      const supabase = createClient();
+
+      // Match the products page: inspect the latest cycle.
+      const { data: cycle, error: cycleError } = await supabase
+        .from("booking_cycles")
+        .select("id, status")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cycleError) throw cycleError;
+
+      if (!cycle || cycle.status !== "open") {
+        toast.error("Bookings are closed right now.");
+        return;
+      }
+
+      // Fetch fresh availability, prices, and all sibling variants
+      // needed to identify each product's shared stock pool.
+      const [productsResult, stockResult] = await Promise.all([
+        supabase
+          .from("products")
+          .select(
+            "id, name, category, is_available, product_variants(id, product_id, name, price, is_available)",
+          )
+          .eq("is_available", true),
+        supabase
+          .from("cycle_stock_remaining")
+          .select("variant_id, remaining_slots")
+          .eq("cycle_id", cycle.id),
+      ]);
+
+      if (productsResult.error) throw productsResult.error;
+      if (stockResult.error) throw stockResult.error;
+
+      type RebookProduct = Pick<
+        Product,
+        "id" | "name" | "category" | "is_available"
+      > & {
+        product_variants: ProductVariant[];
+      };
+
+      const products =
+        (productsResult.data as RebookProduct[] | null) ?? [];
+
+      const variantLookup = new Map<
+        string,
+        { product: RebookProduct; variant: ProductVariant }
+      >();
+
+      for (const product of products) {
+        for (const variant of product.product_variants) {
+          variantLookup.set(variant.id, { product, variant });
+        }
+      }
+
+      // Mutable local budget prevents multiple historical items from
+      // independently consuming the same Full/Half Slot stock.
+      const remainingByPool = new Map<string, number>();
+
+      for (const stock of stockResult.data ?? []) {
+        const remaining = Number(stock.remaining_slots);
+        remainingByPool.set(
+          stock.variant_id,
+          Number.isFinite(remaining) ? Math.max(0, remaining) : 0,
+        );
+      }
+
+      for (const item of order.order_items) {
+        const oldVariant = item.product_variants;
+        const label = oldVariant
+          ? `${oldVariant.products?.name ?? "Product"} (${oldVariant.name})`
+          : "An item from this order";
+
+        const current = oldVariant
+          ? variantLookup.get(oldVariant.id)
+          : undefined;
+
+        if (
+          !current ||
+          !current.product.is_available ||
+          !current.variant.is_available
+        ) {
+          notices.push(`${label}: skipped — product or variant unavailable.`);
+          continue;
+        }
+
+        const { product, variant } = current;
+        const variants = product.product_variants.filter(
+          (candidate) => candidate.is_available,
+        );
+
+        // Same pool selection as ProductCard.
+        const fullSlotVariant =
+          variants.find(
+            (candidate) =>
+              candidate.name.toLowerCase().includes("full slot") ||
+              candidate.name.toLowerCase() === "full" ||
+              candidate.name.toLowerCase() === "standard",
+          ) ?? variants[0];
+
+        if (
+          !fullSlotVariant ||
+          !remainingByPool.has(fullSlotVariant.id)
+        ) {
+          notices.push(`${label}: skipped — stock unavailable for this cycle.`);
+          continue;
+        }
+
+        const poolRemaining = remainingByPool.get(fullSlotVariant.id)!;
+        const isHalfSlot =
+          variant.name.toLowerCase().includes("half slot") ||
+          variant.name.toLowerCase() === "half";
+
+        const availableQuantity = Math.floor(
+          isHalfSlot ? poolRemaining * 2 : poolRemaining,
+        );
+
+        if (availableQuantity <= 0) {
+          notices.push(`${label}: skipped — no stock remaining.`);
+          continue;
+        }
+
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+          notices.push(`${label}: skipped — invalid order quantity.`);
+          continue;
+        }
+
+        const quantity = Math.min(item.quantity, availableQuantity);
+        const withInuEran = item.with_inu_eran;
+
+        if (quantity < item.quantity) {
+          notices.push(
+            `${label}: reduced from ${item.quantity} to ${quantity} ` +
+            "due to remaining stock.",
+          );
+        }
+
+        rebookItems.push({
+          variant_id: variant.id,
+          product_name: product.name,
+          variant_name: variant.name + (withInuEran ? " + Inu Eran" : ""),
+          price: variant.price,
+          quantity,
+          with_inu_eran: withInuEran,
+        });
+
+        remainingByPool.set(
+          fullSlotVariant.id,
+          Math.max(0, poolRemaining - quantity * (isHalfSlot ? 0.5 : 1)),
+        );
+      }
+
+      if (rebookItems.length === 0) {
+        toast.error("None of the items in this order are currently available.", {
+          description: notices.join(" "),
+          duration: 10000,
+        });
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to check Rebook availability:", error);
+      toast.error("Couldn't check current availability. Please try again.", {
+        description: "Your existing cart has been kept.",
       });
-    });
-    toast.success("Items added to cart — ready to rebook!");
+      return;
+    } finally {
+      rebookInFlight.current = false;
+      setRebookingId(null);
+    }
+
+    // All reads and item preparation succeeded, with at least one valid item.
+    clearCart();
+    rebookItems.forEach((item) => addItem(item));
+
+    if (notices.length > 0) {
+      toast.warning("Available items added to cart with changes.", {
+        description: notices.join(" "),
+        duration: 10000,
+      });
+    } else {
+      toast.success("Items added to cart — ready to rebook!");
+    }
+
     router.push("/cart");
   }
 
@@ -358,9 +540,12 @@ export default function OrdersPage() {
                       variant="outline"
                       className="w-full cursor-pointer gap-2 h-10"
                       onClick={() => handleRebook(order)}
+                      disabled={rebookingId !== null}
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
-                      Rebook this order
+                      {rebookingId === order.id
+                        ? "Checking availability..."
+                        : "Rebook this order"}
                     </Button>
                   </div>
                 </div>
