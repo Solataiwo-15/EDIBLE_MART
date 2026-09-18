@@ -305,10 +305,7 @@ export default function OrdersPage() {
       }
 
       if (rebookItems.length === 0) {
-        toast.error("None of the items in this order are currently available.", {
-          description: notices.join(" "),
-          duration: 10000,
-        });
+        toast.error("None of the items in this order are currently available.");
         return;
       }
     } catch (error) {
@@ -327,10 +324,9 @@ export default function OrdersPage() {
     rebookItems.forEach((item) => addItem(item));
 
     if (notices.length > 0) {
-      toast.warning("Available items added to cart with changes.", {
-        description: notices.join(" "),
-        duration: 10000,
-      });
+      toast.warning(
+        "Available items were added to your cart. Some items were unavailable or adjusted."
+      );
     } else {
       toast.success("Items added to cart — ready to rebook!");
     }
